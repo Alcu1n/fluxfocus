@@ -6,19 +6,78 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		877F57538F14235B5B9B6847 /* fluxfocusClip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = A77C561C6D6FA5C3CB6FE63D /* fluxfocusClip.app */; };
+		F31BCB021FD62561275CB79E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 24993E31A3401B8ED420E4D7 /* Foundation.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		59A5EAF92F50471172151433 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F9F6EBFA2F62F93C0049218E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 84A532B971281DA1305FCC63;
+			remoteInfo = fluxfocusClip;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2B6C8F355D980779B09A438B /* Embed App Clips */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/AppClips";
+			dstSubfolderSpec = 16;
+			files = (
+				877F57538F14235B5B9B6847 /* fluxfocusClip.app in Embed App Clips */,
+			);
+			name = "Embed App Clips";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		24993E31A3401B8ED420E4D7 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		A77C561C6D6FA5C3CB6FE63D /* fluxfocusClip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = fluxfocusClip.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F9F6EC022F62F93C0049218E /* fluxfocus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = fluxfocus.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		22B98F5A3BC7DAC0BA8AE34A /* Exceptions for "fluxfocusClip" folder in "fluxfocusClip" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 84A532B971281DA1305FCC63 /* fluxfocusClip */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		4ABAB7097336D53CE7F8A135 /* fluxfocusClip */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				22B98F5A3BC7DAC0BA8AE34A /* Exceptions for "fluxfocusClip" folder in "fluxfocusClip" target */,
+			);
+			path = fluxfocusClip;
+			sourceTree = "<group>";
+		};
 		F9F6EC042F62F93C0049218E /* fluxfocus */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = fluxfocus;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		5DEE02D72A8145EA5D75A0FF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F31BCB021FD62561275CB79E /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F9F6EBFF2F62F93C0049218E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -29,11 +88,29 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		412D5B9241D1A1D0A6CDA887 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				24993E31A3401B8ED420E4D7 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		4D640C7D5F2F90BD2180CDDA /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				412D5B9241D1A1D0A6CDA887 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		F9F6EBF92F62F93C0049218E = {
 			isa = PBXGroup;
 			children = (
 				F9F6EC042F62F93C0049218E /* fluxfocus */,
 				F9F6EC032F62F93C0049218E /* Products */,
+				4ABAB7097336D53CE7F8A135 /* fluxfocusClip */,
+				4D640C7D5F2F90BD2180CDDA /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -41,6 +118,7 @@
 			isa = PBXGroup;
 			children = (
 				F9F6EC022F62F93C0049218E /* fluxfocus.app */,
+				A77C561C6D6FA5C3CB6FE63D /* fluxfocusClip.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,6 +126,26 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		84A532B971281DA1305FCC63 /* fluxfocusClip */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0103772F7E0D51127BC603F4 /* Build configuration list for PBXNativeTarget "fluxfocusClip" */;
+			buildPhases = (
+				7CC5D87D58BA8FA490D68EEF /* Sources */,
+				5DEE02D72A8145EA5D75A0FF /* Frameworks */,
+				330C2967171490B137CFAE05 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				4ABAB7097336D53CE7F8A135 /* fluxfocusClip */,
+			);
+			name = fluxfocusClip;
+			productName = fluxfocusClip;
+			productReference = A77C561C6D6FA5C3CB6FE63D /* fluxfocusClip.app */;
+			productType = "com.apple.product-type.application.on-demand-install-capable";
+		};
 		F9F6EC012F62F93C0049218E /* fluxfocus */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F9F6EC0D2F62F93E0049218E /* Build configuration list for PBXNativeTarget "fluxfocus" */;
@@ -55,17 +153,17 @@
 				F9F6EBFE2F62F93C0049218E /* Sources */,
 				F9F6EBFF2F62F93C0049218E /* Frameworks */,
 				F9F6EC002F62F93C0049218E /* Resources */,
+				2B6C8F355D980779B09A438B /* Embed App Clips */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				4D990165A7EC3E005C1BD192 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				F9F6EC042F62F93C0049218E /* fluxfocus */,
 			);
 			name = fluxfocus;
-			packageProductDependencies = (
-			);
 			productName = fluxfocus;
 			productReference = F9F6EC022F62F93C0049218E /* fluxfocus.app */;
 			productType = "com.apple.product-type.application";
@@ -80,6 +178,9 @@
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
+					84A532B971281DA1305FCC63 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 					F9F6EC012F62F93C0049218E = {
 						CreatedOnToolsVersion = 26.3;
 					};
@@ -100,11 +201,19 @@
 			projectRoot = "";
 			targets = (
 				F9F6EC012F62F93C0049218E /* fluxfocus */,
+				84A532B971281DA1305FCC63 /* fluxfocusClip */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		330C2967171490B137CFAE05 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F9F6EC002F62F93C0049218E /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -115,6 +224,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		7CC5D87D58BA8FA490D68EEF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F9F6EBFE2F62F93C0049218E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -124,7 +240,79 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		4D990165A7EC3E005C1BD192 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = fluxfocusClip;
+			target = 84A532B971281DA1305FCC63 /* fluxfocusClip */;
+			targetProxy = 59A5EAF92F50471172151433 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		6D559DFF95D6EED19D71D4FF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_CLIP_DOMAIN = clip.example.com;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = fluxfocusClip/fluxfocusClip.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RZD9M68FZ9;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = fluxfocusClip/Info.plist;
+				INFOPLIST_KEY_NFCReaderUsageDescription = "此 App 需要读取来自 NFC 标签的专注启动链接。";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.lrai.fluxfocus.Clip;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		D4D3773FA594FD7B5A776454 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_CLIP_DOMAIN = clip.example.com;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = fluxfocusClip/fluxfocusClip.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RZD9M68FZ9;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = fluxfocusClip/Info.plist;
+				INFOPLIST_KEY_NFCReaderUsageDescription = "此 App 需要读取来自 NFC 标签的专注启动链接。";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.lrai.fluxfocus.Clip;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		F9F6EC0B2F62F93E0049218E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -249,18 +437,25 @@
 		F9F6EC0E2F62F93E0049218E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APP_CLIP_DOMAIN = clip.example.com;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = fluxfocus/fluxfocus.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = RZD9M68FZ9;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Flux Focus";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NFCReaderUsageDescription = "此 App 需要使用 NFC 读取和写入标签，用于专注模式NFC 芯片联动测试。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -268,6 +463,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = studio.lrai.fluxfocus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -281,18 +477,25 @@
 		F9F6EC0F2F62F93E0049218E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APP_CLIP_DOMAIN = clip.example.com;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = fluxfocus/fluxfocus.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = RZD9M68FZ9;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Flux Focus";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NFCReaderUsageDescription = "此 App 需要使用 NFC 读取和写入标签，用于专注模式NFC 芯片联动测试。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -300,6 +503,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = studio.lrai.fluxfocus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -313,6 +517,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0103772F7E0D51127BC603F4 /* Build configuration list for PBXNativeTarget "fluxfocusClip" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6D559DFF95D6EED19D71D4FF /* Release */,
+				D4D3773FA594FD7B5A776454 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		F9F6EBFD2F62F93C0049218E /* Build configuration list for PBXProject "fluxfocus" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
