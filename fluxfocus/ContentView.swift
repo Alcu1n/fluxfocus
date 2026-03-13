@@ -9,6 +9,14 @@ import SwiftData
 import SwiftUI
 
 struct ContentView: View {
+    private enum RootTab: Hashable {
+        case home
+        case session
+        case chain
+        case precedent
+        case settings
+    }
+
     @Environment(AppStore.self) private var appStore
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
@@ -27,9 +35,10 @@ struct ContentView: View {
     @State private var showInvocationSheet = false
     @State private var previousScenePhaseName = "active"
     @State private var nfcAlert: NFCAlert?
+    @State private var selectedTab: RootTab = .home
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             NavigationStack {
                 HomeView(
                     draft: $quickStartDraft,
@@ -47,6 +56,7 @@ struct ContentView: View {
             .tabItem {
                 Label("首页", systemImage: "house.fill")
             }
+            .tag(RootTab.home)
 
             NavigationStack {
                 SessionView(
@@ -61,6 +71,7 @@ struct ContentView: View {
             .tabItem {
                 Label("会话", systemImage: "timer")
             }
+            .tag(RootTab.session)
 
             NavigationStack {
                 ChainsView(
@@ -72,6 +83,7 @@ struct ContentView: View {
             .tabItem {
                 Label("链条", systemImage: "link")
             }
+            .tag(RootTab.chain)
 
             NavigationStack {
                 PrecedentsView(violations: violations, rules: rules)
@@ -79,6 +91,7 @@ struct ContentView: View {
             .tabItem {
                 Label("判例", systemImage: "scroll")
             }
+            .tag(RootTab.precedent)
 
             NavigationStack {
                 SettingsView(
@@ -93,6 +106,7 @@ struct ContentView: View {
             .tabItem {
                 Label("设置", systemImage: "gearshape")
             }
+            .tag(RootTab.settings)
         }
         .sheet(isPresented: $showInvocationSheet) {
             InvocationSheet(
@@ -216,7 +230,26 @@ struct ContentView: View {
         if tag.status != .active {
             try? appStore.activateTag(tag, tags: tags, context: modelContext)
         }
-        showInvocationSheet = true
+
+        if appStore.runningSession(from: sessions) != nil {
+            selectedTab = .session
+            return
+        }
+
+        let shouldAutoStart = true
+        if shouldAutoStart {
+            try? appStore.startSession(
+                draft: quickStartDraft,
+                tag: tag,
+                sessions: sessions,
+                nodes: nodes,
+                context: modelContext,
+                source: .nfcInvocation
+            )
+            selectedTab = .session
+        } else {
+            showInvocationSheet = true
+        }
     }
 }
 
