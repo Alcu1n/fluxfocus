@@ -774,6 +774,33 @@ private struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                Section("App Clip 调试") {
+                    if let activeTag = appStore.activeTag(from: tags),
+                       let url = appStore.invocationURL(for: activeTag, configuration: configuration) {
+                        LabeledContent("Invocation URL") {
+                            Text(url.absoluteString)
+                                .font(.caption.monospaced())
+                                .multilineTextAlignment(.trailing)
+                        }
+                        LabeledContent("AASA") {
+                            Text("https://\(configuration.invocationHost)/.well-known/apple-app-site-association")
+                                .font(.caption.monospaced())
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("真机调试要点")
+                            .font(.footnote.weight(.semibold))
+                        Text("1. 测试 App Clip 卡片时，测试机上不要安装完整 App。")
+                        Text("2. NFC 标签必须写入当前显示的 invocation URL，而不是普通文本。")
+                        Text("3. App Store Connect 中的 App Clip Experience 需要使用 host \(configuration.invocationHost) 和路径前缀 /i/。")
+                        Text("4. 如果你之前在 设置 > Developer > Local Experiences 注册过本地 App Clip 调试项，先删除它，否则系统会优先走本地体验。")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
             }
 
             if let policy = appStore.activeShieldPolicy(from: policies) {
