@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FluxFocus App Clip</title>
+  <meta name="description" content="FluxFocus App Clip invocation domain and Apple App Site Association host.">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f3ec;
+      --card: rgba(255, 255, 255, 0.84);
+      --ink: #1f2a2a;
+      --muted: #5e6b68;
+      --accent: #0f766e;
+      --line: rgba(31, 42, 42, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 34%),
+        radial-gradient(circle at right 20%, rgba(194, 65, 12, 0.12), transparent 24%),
+        linear-gradient(180deg, #faf7f2 0%, var(--bg) 100%);
+    }
+
+    main {
+      width: min(920px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 64px 0 48px;
+    }
+
+    .hero {
+      display: grid;
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.5rem, 6vw, 4.8rem);
+      line-height: 0.94;
+      letter-spacing: -0.04em;
+    }
+
+    p {
+      margin: 0;
+      max-width: 62ch;
+      font-size: 1.05rem;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+
+    .card {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--card);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 18px 50px rgba(31, 42, 42, 0.08);
+    }
+
+    .eyebrow {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(15, 118, 110, 0.1);
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      word-break: break-all;
+    }
+
+    a {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <span class="eyebrow">FluxFocus</span>
+      <h1>App Clip invocation domain</h1>
+      <p>
+        This host serves the Apple App Site Association file for the FluxFocus app and App Clip.
+        NFC tags should point to invocation URLs under <span class="mono">/i/&lt;tagPublicId&gt;?v=1&amp;s=...</span>.
+      </p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <span class="eyebrow">Domain</span>
+        <p class="mono">https://fluxfocusclip.lraitech.com</p>
+      </article>
+      <article class="card">
+        <span class="eyebrow">AASA</span>
+        <p><a href="/.well-known/apple-app-site-association">/.well-known/apple-app-site-association</a></p>
+      </article>
+      <article class="card">
+        <span class="eyebrow">Invocation</span>
+        <p class="mono">https://fluxfocusclip.lraitech.com/i/desk-altar-001?v=1&amp;s=...</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

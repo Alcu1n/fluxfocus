@@ -1,0 +1,23 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "RZD9M68FZ9.studio.lrai.fluxfocus",
+          "RZD9M68FZ9.studio.lrai.fluxfocus.Clip"
+        ],
+        "components": [
+          {
+            "/": "/i/*",
+            "comment": "FluxFocus NFC and App Clip invocation URLs"
+          }
+        ]
+      }
+    ]
+  },
+  "appclips": {
+    "apps": [
+      "RZD9M68FZ9.studio.lrai.fluxfocus.Clip"
+    ]
+  }
+}

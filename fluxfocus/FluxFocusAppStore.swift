@@ -59,7 +59,7 @@ final class AppStore {
         if configs.isEmpty {
             context.insert(
                 AppConfiguration(
-                    invocationHost: "clip.example.com",
+                    invocationHost: "fluxfocusclip.lraitech.com",
                     signatureSalt: "fluxfocus-mvp"
                 )
             )

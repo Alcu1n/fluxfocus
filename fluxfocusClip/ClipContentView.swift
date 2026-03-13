@@ -120,7 +120,7 @@ struct ClipContentView: View {
 #Preview {
     ClipContentView(
         context: ClipLaunchContext(
-            url: URL(string: "https://clip.example.com/i/desk-altar-001?v=1&s=demo")
+            url: URL(string: "https://fluxfocusclip.lraitech.com/i/desk-altar-001?v=1&s=demo")
         )
     )
 }

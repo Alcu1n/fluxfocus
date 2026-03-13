@@ -253,7 +253,7 @@
 		6D559DFF95D6EED19D71D4FF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				APP_CLIP_DOMAIN = clip.example.com;
+				APP_CLIP_DOMAIN = fluxfocusclip.lraitech.com;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = fluxfocusClip/fluxfocusClip.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -285,7 +285,7 @@
 		D4D3773FA594FD7B5A776454 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				APP_CLIP_DOMAIN = clip.example.com;
+				APP_CLIP_DOMAIN = fluxfocusclip.lraitech.com;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = fluxfocusClip/fluxfocusClip.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -437,7 +437,7 @@
 		F9F6EC0E2F62F93E0049218E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				APP_CLIP_DOMAIN = clip.example.com;
+				APP_CLIP_DOMAIN = fluxfocusclip.lraitech.com;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = fluxfocus/fluxfocus.entitlements;
@@ -477,7 +477,7 @@
 		F9F6EC0F2F62F93E0049218E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				APP_CLIP_DOMAIN = clip.example.com;
+				APP_CLIP_DOMAIN = fluxfocusclip.lraitech.com;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = fluxfocus/fluxfocus.entitlements;
