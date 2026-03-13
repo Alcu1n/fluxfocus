@@ -439,6 +439,18 @@ final class AppStore {
         try context.save()
     }
 
+    func updateShieldActivitySelection(
+        policy: ShieldPolicy,
+        encodedSelection: Data?,
+        summary: [String],
+        context: ModelContext
+    ) throws {
+        policy.activitySelectionData = encodedSelection
+        policy.selectedApps = summary
+        policy.updatedAt = .now
+        try context.save()
+    }
+
     func expireOverdueAppointments(context: ModelContext, now: Date) throws {
         let appointments = fetchAppointments(context: context)
         let rules = try context.fetch(FetchDescriptor<PrecedentRule>())

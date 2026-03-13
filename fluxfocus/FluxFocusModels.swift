@@ -346,17 +346,20 @@ final class PrecedentRule {
 final class ShieldPolicy {
     @Attribute(.unique) var id: UUID
     var selectedAppsBlob: String
+    var activitySelectionData: Data?
     var enabled: Bool
     var updatedAt: Date
 
     init(
         id: UUID = UUID(),
         selectedApps: [String],
+        activitySelectionData: Data? = nil,
         enabled: Bool = true,
         updatedAt: Date = .now
     ) {
         self.id = id
         self.selectedAppsBlob = selectedApps.joined(separator: "|")
+        self.activitySelectionData = activitySelectionData
         self.enabled = enabled
         self.updatedAt = updatedAt
     }

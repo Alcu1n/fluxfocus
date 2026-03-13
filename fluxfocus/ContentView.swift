@@ -1,9 +1,11 @@
-// [IN]: SwiftUI, SwiftData queries, AppStore service, NFCManager, local focus models / SwiftUI、SwiftData 查询、AppStore 服务、NFCManager、本地专注模型
-// [OUT]: Main tab UI, NFC write/read entry points, invocation routing to sessions / 主标签 UI、NFC 读写入口、invocation 到会话的路由
+// [IN]: SwiftUI, SwiftData queries, AppStore service, NFCManager, FamilyControls, and local focus models / SwiftUI、SwiftData 查询、AppStore 服务、NFCManager、FamilyControls 与本地专注模型
+// [OUT]: Main tab UI, NFC write/read entry points, invocation routing, and Focus Shield settings / 主标签 UI、NFC 读写入口、invocation 路由与 Focus Shield 设置
 // [POS]: Primary SwiftUI composition root for the full app experience / 完整应用体验的主要 SwiftUI 组合根
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
 
+import FamilyControls
+import ManagedSettings
 import SwiftData
 import SwiftUI
 
@@ -19,6 +21,7 @@ struct ContentView: View {
     @Environment(AppStore.self) private var appStore
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var focusShieldController: FocusShieldController
 
     @StateObject private var nfcManager = NFCManager()
     @Query(sort: \FocusSession.startAt, order: .reverse) private var sessions: [FocusSession]
@@ -126,6 +129,9 @@ struct ContentView: View {
         .task {
             try? appStore.bootstrapIfNeeded(context: modelContext)
         }
+        .task(id: shieldSyncKey) {
+            syncFocusShield()
+        }
         .onChange(of: scenePhase) { oldValue, newValue in
             let oldName = previousScenePhaseName
             previousScenePhaseName = newValue.label
@@ -157,6 +163,18 @@ struct ContentView: View {
         violations.first(where: { $0.decisionStatus == .pending })
     }
 
+    private var shieldSyncKey: String {
+        let runningSession = appStore.runningSession(from: sessions)
+        let policy = appStore.activeShieldPolicy(from: policies)
+        return [
+            runningSession?.id.uuidString ?? "none",
+            runningSession?.shieldEnabled == true ? "session-on" : "session-off",
+            policy?.id.uuidString ?? "policy-none",
+            policy?.enabled == true ? "policy-on" : "policy-off",
+            policy?.updatedAt.ISO8601Format() ?? "never"
+        ].joined(separator: "|")
+    }
+
     private func handleTagTouch() {
         nfcManager.beginInvocationScan { result in
             switch result {
@@ -174,6 +192,16 @@ struct ContentView: View {
                 nfcAlert = NFCAlert(title: "NFC 读取失败", message: error.localizedDescription)
             }
         }
+    }
+
+    private func syncFocusShield() {
+        let runningSession = appStore.runningSession(from: sessions)
+        let policy = appStore.activeShieldPolicy(from: policies)
+        focusShieldController.restoreSelection(from: policy)
+        focusShieldController.applyShield(
+            isEnabled: policy?.enabled == true && runningSession?.shieldEnabled == true,
+            isSessionRunning: runningSession != nil
+        )
     }
 
     private func writeCurrentTag() {
@@ -736,6 +764,7 @@ private struct PrecedentsView: View {
 private struct SettingsView: View {
     @Environment(AppStore.self) private var appStore
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var focusShieldController: FocusShieldController
 
     @ObservedObject var nfcManager: NFCManager
     let tags: [Tag]
@@ -848,22 +877,191 @@ private struct SettingsView: View {
             }
 
             if let policy = appStore.activeShieldPolicy(from: policies) {
-                Section("Focus Shield") {
-                    Toggle("启用专注期屏蔽", isOn: Binding(
-                        get: { policy.enabled },
-                        set: { try? appStore.updateShieldEnabled(policy: policy, enabled: $0, context: modelContext) }
-                    ))
+                FocusShieldSection(policy: policy)
+            }
+        }
+        .navigationTitle("设置")
+    }
+}
 
-                    ForEach(appStore.shieldCatalog, id: \.self) { app in
-                        Toggle(app, isOn: Binding(
-                            get: { policy.selectedApps.contains(app) },
-                            set: { try? appStore.updateShieldSelection(policy: policy, app: app, isSelected: $0, context: modelContext) }
-                        ))
+private struct FocusShieldSection: View {
+    @Environment(AppStore.self) private var appStore
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var focusShieldController: FocusShieldController
+
+    let policy: ShieldPolicy
+
+    var body: some View {
+        Section("Focus Shield") {
+            Toggle("启用专注期屏蔽", isOn: shieldEnabledBinding)
+
+            Button("选择屏蔽 App 与网站") {
+                Task {
+                    _ = await focusShieldController.beginSelectionFlow()
+                }
+            }
+
+            selectedSummaryRow
+            tokenSection("已选 App", tokens: focusShieldController.selectedApplicationTokens)
+            tokenSection("已选分类", tokens: focusShieldController.selectedCategoryTokens)
+            tokenSection("已选网站", tokens: focusShieldController.selectedWebDomainTokens)
+
+            Text(statusCopy)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let lastErrorMessage = focusShieldController.lastErrorMessage {
+                Text(lastErrorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+        .familyActivityPicker(
+            isPresented: $focusShieldController.isPickerPresented,
+            selection: $focusShieldController.activitySelection
+        )
+        .task(id: policy.updatedAt) {
+            focusShieldController.restoreSelection(from: policy)
+        }
+        .onChange(of: focusShieldController.activitySelection) { _, _ in
+            persistShieldSelection()
+        }
+    }
+
+    private var shieldEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { policy.enabled },
+            set: { newValue in
+                Task {
+                    await handleShieldEnabledChange(newValue)
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var selectedSummaryRow: some View {
+        if policy.activitySelectionData != nil || focusShieldController.selectionSummary.isEmpty == false {
+            LabeledContent("已选项目") {
+                Text(summaryText)
+                    .font(.caption)
+                    .multilineTextAlignment(.trailing)
+            }
+        } else {
+            Text("尚未选择任何 App、分类或网站。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var summaryText: String {
+        let summary = focusShieldController.selectionSummary.joined(separator: " · ")
+        return summary.isEmpty ? "已保存选择" : summary
+    }
+
+    private var statusCopy: String {
+        switch focusShieldController.authorizationStatus {
+        case .approved:
+            "Family Controls 已授权。选择的项目会在启用 Focus Shield 且会话进行中时被真实屏蔽。"
+        case .denied:
+            "Family Controls 已被拒绝。请在系统设置中重新授权。"
+        case .notDetermined:
+            "首次启用时会弹出系统授权与选择器。"
+        @unknown default:
+            "Family Controls 状态未知，请重新进入此页面确认授权。"
+        }
+    }
+
+    @ViewBuilder
+    private func tokenSection(_ title: String, tokens: [ActivityCategoryToken]) -> some View {
+        if tokens.isEmpty == false {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.footnote.weight(.semibold))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(tokens, id: \.self) { token in
+                            Label(token)
+                                .labelStyle(.titleAndIcon)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(.thinMaterial, in: Capsule())
+                        }
                     }
                 }
             }
         }
-        .navigationTitle("设置")
+    }
+
+    @ViewBuilder
+    private func tokenSection(_ title: String, tokens: [WebDomainToken]) -> some View {
+        if tokens.isEmpty == false {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.footnote.weight(.semibold))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(tokens, id: \.self) { token in
+                            Label(token)
+                                .labelStyle(.titleAndIcon)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(.thinMaterial, in: Capsule())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tokenSection(_ title: String, tokens: [ApplicationToken]) -> some View {
+        if tokens.isEmpty == false {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.footnote.weight(.semibold))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(tokens, id: \.self) { token in
+                            Label(token)
+                                .labelStyle(.titleAndIcon)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(.thinMaterial, in: Capsule())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func handleShieldEnabledChange(_ isEnabled: Bool) async {
+        if isEnabled {
+            let isAuthorized = await focusShieldController.requestAuthorizationIfNeeded()
+            guard isAuthorized else {
+                try? appStore.updateShieldEnabled(policy: policy, enabled: false, context: modelContext)
+                return
+            }
+
+            try? appStore.updateShieldEnabled(policy: policy, enabled: true, context: modelContext)
+            focusShieldController.restoreSelection(from: policy)
+            if policy.activitySelectionData == nil && focusShieldController.selectionSummary.isEmpty {
+                focusShieldController.isPickerPresented = true
+            }
+            return
+        }
+
+        try? appStore.updateShieldEnabled(policy: policy, enabled: false, context: modelContext)
+        focusShieldController.clearShield()
+    }
+
+    private func persistShieldSelection() {
+        try? appStore.updateShieldActivitySelection(
+            policy: policy,
+            encodedSelection: focusShieldController.persistableSelectionData(),
+            summary: focusShieldController.selectionSummary,
+            context: modelContext
+        )
     }
 }
 
