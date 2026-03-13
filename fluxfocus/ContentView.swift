@@ -214,13 +214,17 @@ struct ContentView: View {
     }
 
     private func handleInvocationURL(_ url: URL, physicalUID: String? = nil) {
-        guard let publicId = appStore.parseInvocationURL(url),
-              let tag = appStore.tag(for: publicId, tags: tags) else {
+        guard let route = appStore.parseInvocationRoute(url),
+              let tag = appStore.tag(for: route.publicId, tags: tags) else {
             nfcAlert = NFCAlert(
                 title: "标签无效",
                 message: "读取到了 NFC 内容，但不是当前 App 可识别的 FluxFocus invocation URL。"
             )
             return
+        }
+
+        if let clipDurationMinutes = route.clipDurationMinutes {
+            quickStartDraft.durationMinutes = max(5, clipDurationMinutes)
         }
 
         if let physicalUID {

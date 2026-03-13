@@ -34,6 +34,7 @@ struct ClipContentView: View {
     @State private var shieldEnabled = true
     @State private var runningSession: ClipFocusSession?
     @State private var completedSession: ClipFocusSession?
+    @State private var didAttemptFullAppHandoff = false
 
     var body: some View {
         NavigationStack {
@@ -60,6 +61,13 @@ struct ClipContentView: View {
                 .ignoresSafeArea()
             )
             .navigationTitle("FluxFocus Clip")
+            .onAppear {
+                attemptAutomaticHandoffIfPossible()
+            }
+            .onChange(of: context.url) { _, _ in
+                didAttemptFullAppHandoff = false
+                attemptAutomaticHandoffIfPossible()
+            }
         }
     }
 
@@ -69,6 +77,9 @@ struct ClipContentView: View {
                 .font(.largeTitle.bold())
             Text("App Clip 已接收到 NFC / Link invocation。先在 Clip 内进入会话，后续再按需跳转完整 App。")
                 .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text("如果完整 App 已安装，Clip 会优先尝试自动移交到完整 App。")
+                .font(.footnote)
                 .foregroundStyle(.secondary)
         }
     }
@@ -208,8 +219,8 @@ struct ClipContentView: View {
     }
 
     private func continueInFullApp() {
-        guard let url = context.url else { return }
-        openURL(continueURL(for: url))
+        guard let url = continueURL(for: context.url) else { return }
+        openURL(url)
     }
 
     private func reopenInvocationURL() {
@@ -217,10 +228,12 @@ struct ClipContentView: View {
         openURL(url)
     }
 
-    private func continueURL(for url: URL) -> URL {
+    private func continueURL(for url: URL?) -> URL? {
+        guard let handoffURL = fullAppLaunchURL(from: url) else { return nil }
+
         guard completedSession != nil,
-              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return url
+              var components = URLComponents(url: handoffURL, resolvingAgainstBaseURL: false) else {
+            return handoffURL
         }
 
         var queryItems = components.queryItems ?? []
@@ -228,7 +241,39 @@ struct ClipContentView: View {
         queryItems.append(URLQueryItem(name: "clip_completed", value: "1"))
         queryItems.append(URLQueryItem(name: "clip_duration", value: "\(durationMinutes)"))
         components.queryItems = queryItems
-        return components.url ?? url
+        return components.url ?? handoffURL
+    }
+
+    private func attemptAutomaticHandoffIfPossible() {
+        guard context.isValidInvocation,
+              didAttemptFullAppHandoff == false,
+              let url = fullAppLaunchURL(from: context.url) else {
+            return
+        }
+
+        didAttemptFullAppHandoff = true
+        openURL(url) { accepted in
+            if accepted == false {
+                didAttemptFullAppHandoff = false
+            }
+        }
+    }
+
+    private func fullAppLaunchURL(from url: URL?) -> URL? {
+        guard let publicId = context.publicId else { return nil }
+
+        var components = URLComponents()
+        components.scheme = "fluxfocus"
+        components.host = "focus"
+        components.path = "/\(publicId)"
+
+        if let url,
+           let existingItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+           existingItems.isEmpty == false {
+            components.queryItems = existingItems
+        }
+
+        return components.url
     }
 }
 

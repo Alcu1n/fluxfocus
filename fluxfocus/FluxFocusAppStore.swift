@@ -9,6 +9,12 @@ import Foundation
 import Observation
 import SwiftData
 
+struct InvocationRoute: Equatable {
+    let publicId: String
+    let clipCompleted: Bool
+    let clipDurationMinutes: Int?
+}
+
 @MainActor
 @Observable
 final class AppStore {
@@ -26,6 +32,8 @@ final class AppStore {
     private(set) var didBootstrap = false
     private var backgroundEnteredAt: Date?
     private let invocationPathPrefix = "i"
+    private let fullAppHandoffScheme = "fluxfocus"
+    private let fullAppHandoffHost = "focus"
 
     func bootstrapIfNeeded(context: ModelContext) throws {
         guard !didBootstrap else { return }
@@ -93,14 +101,37 @@ final class AppStore {
     }
 
     func parseInvocationURL(_ url: URL) -> String? {
-        let pathParts = url.pathComponents.filter { $0 != "/" }
-        guard pathParts.count >= 2, pathParts[0] == invocationPathPrefix else { return nil }
-        let publicId = pathParts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-        return publicId.isEmpty ? nil : publicId
+        parseInvocationRoute(url)?.publicId
+    }
+
+    func parseInvocationRoute(_ url: URL) -> InvocationRoute? {
+        if url.scheme?.lowercased() == fullAppHandoffScheme {
+            return parseFullAppHandoffRoute(url)
+        }
+        return parseWebInvocationRoute(url)
     }
 
     func invocationPath(for publicId: String) -> String {
         "/\(invocationPathPrefix)/\(publicId)"
+    }
+
+    func fullAppLaunchURL(from url: URL) -> URL? {
+        guard let route = parseInvocationRoute(url) else { return nil }
+
+        var components = URLComponents()
+        components.scheme = fullAppHandoffScheme
+        components.host = fullAppHandoffHost
+        components.path = "/\(route.publicId)"
+
+        var queryItems: [URLQueryItem] = []
+        if route.clipCompleted {
+            queryItems.append(URLQueryItem(name: "clip_completed", value: "1"))
+        }
+        if let clipDurationMinutes = route.clipDurationMinutes {
+            queryItems.append(URLQueryItem(name: "clip_duration", value: "\(clipDurationMinutes)"))
+        }
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
+        return components.url
     }
 
     func tag(for publicId: String, tags: [Tag]) -> Tag? {
@@ -522,6 +553,36 @@ final class AppStore {
         return digest.compactMap { String(format: "%02x", $0) }.joined()
     }
 
+    private func parseWebInvocationRoute(_ url: URL) -> InvocationRoute? {
+        let pathParts = url.pathComponents.filter { $0 != "/" }
+        guard pathParts.count >= 2, pathParts[0] == invocationPathPrefix else { return nil }
+
+        let publicId = normalizedPublicID(pathParts[1])
+        guard !publicId.isEmpty else { return nil }
+
+        return InvocationRoute(
+            publicId: publicId,
+            clipCompleted: queryValue(named: "clip_completed", in: url) == "1",
+            clipDurationMinutes: Int(queryValue(named: "clip_duration", in: url) ?? "")
+        )
+    }
+
+    private func parseFullAppHandoffRoute(_ url: URL) -> InvocationRoute? {
+        guard url.host?.lowercased() == fullAppHandoffHost else { return nil }
+
+        let pathParts = url.pathComponents.filter { $0 != "/" }
+        guard let firstPart = pathParts.first else { return nil }
+
+        let publicId = normalizedPublicID(firstPart)
+        guard !publicId.isEmpty else { return nil }
+
+        return InvocationRoute(
+            publicId: publicId,
+            clipCompleted: queryValue(named: "clip_completed", in: url) == "1",
+            clipDurationMinutes: Int(queryValue(named: "clip_duration", in: url) ?? "")
+        )
+    }
+
     private func baseURL(for configuration: AppConfiguration) -> URL? {
         baseComponents(for: configuration)?.url
     }
@@ -534,5 +595,16 @@ final class AppStore {
         components.scheme = "https"
         components.host = host
         return components
+    }
+
+    private func normalizedPublicID(_ rawValue: String) -> String {
+        rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func queryValue(named name: String, in url: URL) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == name })?
+            .value
     }
 }

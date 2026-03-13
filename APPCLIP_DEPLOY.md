@@ -26,6 +26,8 @@
   每张物理 NFC 标签应写入各自的 `/i/<tagPublicId>` invocation URL。
 - Do not append long signature hashes to the public invocation URL.  
   不要在公开 invocation URL 上追加长签名哈希。
+- For side-loaded development builds, the App Clip can hand off to the full app via `fluxfocus://focus/<tagPublicId>`.  
+  对于侧载开发构建，App Clip 可通过 `fluxfocus://focus/<tagPublicId>` 移交到完整 App。
 
 Example / 示例:
 
