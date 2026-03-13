@@ -1,9 +1,8 @@
-//
-//  FluxFocusAppStore.swift
-//  fluxfocus
-//
-//  Created by Codex on 2026/3/12.
-//
+// [IN]: Foundation, CryptoKit, SwiftData, app models and NFC/App Clip URL rules / Foundation、CryptoKit、SwiftData、应用模型与 NFC/App Clip URL 规则
+// [OUT]: AppStore state orchestration, short invocation URL generation, session and chain mutations / AppStore 状态编排、短 invocation URL 生成、会话与链条变更
+// [POS]: Main domain service for local MVP state and invocation routing / 本地 MVP 状态与 invocation 路由的主领域服务
+// Protocol: When updating me, sync this header + parent folder's .folder.md
+// 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
 
 import CryptoKit
 import Foundation
@@ -26,6 +25,7 @@ final class AppStore {
 
     private(set) var didBootstrap = false
     private var backgroundEnteredAt: Date?
+    private let invocationPathPrefix = "i"
 
     func bootstrapIfNeeded(context: ModelContext) throws {
         guard !didBootstrap else { return }
@@ -60,7 +60,7 @@ final class AppStore {
             context.insert(
                 AppConfiguration(
                     invocationHost: "fluxfocusclip.lraitech.com",
-                    signatureSalt: "fluxfocus-mvp"
+                    signatureSalt: "legacy-unused"
                 )
             )
         }
@@ -82,25 +82,25 @@ final class AppStore {
         configurations.first
     }
 
+    func appClipExperienceURL(for configuration: AppConfiguration) -> URL? {
+        baseURL(for: configuration)
+    }
+
     func invocationURL(for tag: Tag, configuration: AppConfiguration) -> URL? {
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = configuration.invocationHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        components.path = "/i/\(tag.tagPublicId)"
-        components.queryItems = [
-            URLQueryItem(name: "v", value: "1"),
-            URLQueryItem(name: "s", value: signature(for: tag.tagPublicId, salt: configuration.signatureSalt))
-        ]
+        guard var components = baseComponents(for: configuration) else { return nil }
+        components.path = invocationPath(for: tag.tagPublicId)
         return components.url
     }
 
     func parseInvocationURL(_ url: URL) -> String? {
-        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let pathParts = url.pathComponents.filter { $0 != "/" }
-        guard pathParts.count >= 2, pathParts[0] == "i" else { return nil }
-        let version = components?.queryItems?.first(where: { $0.name == "v" })?.value
-        guard version == "1" else { return nil }
-        return pathParts[1]
+        guard pathParts.count >= 2, pathParts[0] == invocationPathPrefix else { return nil }
+        let publicId = pathParts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        return publicId.isEmpty ? nil : publicId
+    }
+
+    func invocationPath(for publicId: String) -> String {
+        "/\(invocationPathPrefix)/\(publicId)"
     }
 
     func tag(for publicId: String, tags: [Tag]) -> Tag? {
@@ -522,9 +522,17 @@ final class AppStore {
         return digest.compactMap { String(format: "%02x", $0) }.joined()
     }
 
-    private func signature(for publicId: String, salt: String) -> String {
-        let raw = "\(publicId)|1|\(salt)"
-        let digest = SHA256.hash(data: Data(raw.utf8))
-        return digest.compactMap { String(format: "%02x", $0) }.joined()
+    private func baseURL(for configuration: AppConfiguration) -> URL? {
+        baseComponents(for: configuration)?.url
+    }
+
+    private func baseComponents(for configuration: AppConfiguration) -> URLComponents? {
+        let host = configuration.invocationHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty else { return nil }
+
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = host
+        return components
     }
 }

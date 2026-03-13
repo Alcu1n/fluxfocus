@@ -1,9 +1,8 @@
-//
-//  ContentView.swift
-//  fluxfocus
-//
-//  Created by Codex on 2026/3/12.
-//
+// [IN]: SwiftUI, SwiftData queries, AppStore service, NFCManager, local focus models / SwiftUI、SwiftData 查询、AppStore 服务、NFCManager、本地专注模型
+// [OUT]: Main tab UI, NFC write/read entry points, invocation routing to sessions / 主标签 UI、NFC 读写入口、invocation 到会话的路由
+// [POS]: Primary SwiftUI composition root for the full app experience / 完整应用体验的主要 SwiftUI 组合根
+// Protocol: When updating me, sync this header + parent folder's .folder.md
+// 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
 
 import SwiftData
 import SwiftUI
@@ -308,7 +307,7 @@ private struct HomeView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("触碰摆件，进入承诺场景")
                 .font(.title2.bold())
-            Text("当前 MVP 以本地规则引擎运行。这里模拟 NFC / App Clip 入口，并保留主链、预约链、判例与屏蔽策略。")
+            Text("当前 MVP 以本地规则引擎运行。这里接入真实 NFC / App Clip invocation，同时保留主链、预约链、判例与屏蔽策略。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
@@ -323,7 +322,7 @@ private struct HomeView: View {
             Button {
                 handleTagTouch()
             } label: {
-                Label("真实触碰 NFC 并打开入口 Sheet", systemImage: "iphone.gen3.radiowaves.left.and.right")
+                Label("真实触碰 NFC 并进入专注流程", systemImage: "iphone.gen3.radiowaves.left.and.right")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -809,6 +808,14 @@ private struct SettingsView: View {
                 }
 
                 Section("App Clip 调试") {
+                    if let experienceURL = appStore.appClipExperienceURL(for: configuration) {
+                        LabeledContent("Connect Experience URL") {
+                            Text(experienceURL.absoluteString)
+                                .font(.caption.monospaced())
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+
                     if let activeTag = appStore.activeTag(from: tags),
                        let url = appStore.invocationURL(for: activeTag, configuration: configuration) {
                         LabeledContent("Invocation URL") {
@@ -826,10 +833,10 @@ private struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("真机调试要点")
                             .font(.footnote.weight(.semibold))
-                        Text("1. 测试 App Clip 卡片时，测试机上不要安装完整 App。")
-                        Text("2. NFC 标签必须写入当前显示的 invocation URL，而不是普通文本。")
-                        Text("3. App Store Connect 中的 App Clip Experience 需要使用 host \(configuration.invocationHost) 和路径前缀 /i/。")
-                        Text("4. 如果你之前在 设置 > Developer > Local Experiences 注册过本地 App Clip 调试项，先删除它，否则系统会优先走本地体验。")
+                        Text("1. App Store Connect 中的 App Clip Experience URL 使用短地址 https://\(configuration.invocationHost)；物理 NFC 标签写入当前显示的 Invocation URL。")
+                        Text("2. 每张 NFC 标签可以各自写入不同的 /i/<tagId>，不需要在 Connect 里逐条注册。")
+                        Text("3. 若设备已安装完整 App，点卡片的“打开”后 invocation 会交给完整 App 继续。")
+                        Text("4. 如果你之前在 设置 > Developer > Local Experiences 注册过本地体验，测线上链路前先删除它。")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)

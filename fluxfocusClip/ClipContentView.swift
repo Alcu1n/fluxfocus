@@ -1,9 +1,8 @@
-//
-//  ClipContentView.swift
-//  fluxfocusClip
-//
-//  Created by Codex on 2026/3/13.
-//
+// [IN]: SwiftUI, invocation URL payload, and lightweight local clip session state / SwiftUI、invocation URL 载荷与轻量 Clip 会话状态
+// [OUT]: App Clip landing UI, invocation diagnostics, and optional local timer flow / App Clip 落地 UI、invocation 诊断与可选本地计时流程
+// [POS]: Focus-first App Clip surface that can hand off to the installed full app / 可移交给已安装完整应用的专注优先 App Clip 界面
+// Protocol: When updating me, sync this header + parent folder's .folder.md
+// 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
 
 import SwiftUI
 
@@ -15,12 +14,10 @@ struct ClipLaunchContext: Equatable {
     init(url: URL? = nil) {
         self.url = url
         if let url {
-            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
             let pathParts = url.pathComponents.filter { $0 != "/" }
-            let version = components?.queryItems?.first(where: { $0.name == "v" })?.value
             let publicId = pathParts.count >= 2 && pathParts[0] == "i" ? pathParts[1] : nil
             self.publicId = publicId
-            self.isValidInvocation = publicId != nil && version == "1"
+            self.isValidInvocation = publicId != nil
         } else {
             self.publicId = nil
             self.isValidInvocation = false
@@ -87,7 +84,7 @@ struct ClipContentView: View {
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
             if context.isValidInvocation == false {
-                Text("如果这是通过 NFC 真实触发的结果，优先检查 App Store Connect 里的 App Clip Experience 是否已发布，并确认设备上没有安装完整 App。")
+                Text("如果这是通过 NFC 真实触发的结果，先检查 Connect 里是否注册了短 Experience URL，并确认标签内容是 /i/<tagId> 这种短路径。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -262,7 +259,7 @@ private extension Int {
 #Preview {
     ClipContentView(
         context: ClipLaunchContext(
-            url: URL(string: "https://fluxfocusclip.lraitech.com/i/desk-altar-001?v=1&s=demo")
+            url: URL(string: "https://fluxfocusclip.lraitech.com/i/desk-altar-001")
         )
     )
 }

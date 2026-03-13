@@ -1,9 +1,8 @@
-//
-//  FluxFocusModels.swift
-//  fluxfocus
-//
-//  Created by Codex on 2026/3/12.
-//
+// [IN]: Foundation and SwiftData model macros / Foundation 与 SwiftData 模型宏
+// [OUT]: Persistent entities and lightweight dashboard/session value types / 持久化实体与轻量看板/会话值类型
+// [POS]: Canonical local schema for tags, sessions, violations, and configuration / 标签、会话、违规与配置的本地规范数据模式
+// Protocol: When updating me, sync this header + parent folder's .folder.md
+// 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
 
 import Foundation
 import SwiftData
@@ -406,6 +405,7 @@ final class AppConfiguration {
     ) {
         self.id = id
         self.invocationHost = invocationHost
+        // Keep the legacy field to avoid a destructive local migration.
         self.signatureSalt = signatureSalt
         self.updatedAt = updatedAt
     }

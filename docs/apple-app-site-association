@@ -9,7 +9,7 @@
         "components": [
           {
             "/": "/i/*",
-            "comment": "FluxFocus NFC and App Clip invocation URLs"
+            "comment": "FluxFocus NFC and App Clip invocation URLs / FluxFocus NFC 与 App Clip invocation 链接"
           }
         ]
       }
