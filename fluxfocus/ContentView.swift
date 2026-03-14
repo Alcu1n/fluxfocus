@@ -1,5 +1,5 @@
-// [IN]: SwiftUI, SwiftData queries, AppStore service, NFCManager, FamilyControls, and local focus models / SwiftUI、SwiftData 查询、AppStore 服务、NFCManager、FamilyControls 与本地专注模型
-// [OUT]: Main tab UI, NFC write/read entry points, invocation routing, and Focus Shield settings / 主标签 UI、NFC 读写入口、invocation 路由与 Focus Shield 设置
+// [IN]: SwiftUI, SwiftData queries, AppStore service, NFCManager, FamilyControls, WheelPickerKit, and local focus models / SwiftUI、SwiftData 查询、AppStore 服务、NFCManager、FamilyControls、WheelPickerKit 与本地专注模型
+// [OUT]: Main tab UI, NFC write/read entry points, invocation routing, wheel-based session drafting, and Focus Shield settings / 主标签 UI、NFC 读写入口、invocation 路由、基于滚轮的会话编排与 Focus Shield 设置
 // [POS]: Primary SwiftUI composition root for the full app experience / 完整应用体验的主要 SwiftUI 组合根
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
@@ -8,6 +8,7 @@ import FamilyControls
 import ManagedSettings
 import SwiftData
 import SwiftUI
+import WheelPickerKit
 
 struct ContentView: View {
     private enum RootTab: Hashable {
@@ -267,20 +268,15 @@ struct ContentView: View {
             return
         }
 
-        let shouldAutoStart = true
-        if shouldAutoStart {
-            try? appStore.startSession(
-                draft: quickStartDraft,
-                tag: tag,
-                sessions: sessions,
-                nodes: nodes,
-                context: modelContext,
-                source: .nfcInvocation
-            )
-            selectedTab = .session
-        } else {
-            showInvocationSheet = true
-        }
+        try? appStore.startSession(
+            draft: quickStartDraft,
+            tag: tag,
+            sessions: sessions,
+            nodes: nodes,
+            context: modelContext,
+            source: .nfcInvocation
+        )
+        selectedTab = .session
     }
 }
 
@@ -497,121 +493,352 @@ private struct SessionView: View {
     let policies: [ShieldPolicy]
 
     var body: some View {
-        let activeSession = appStore.runningSession(from: sessions)
-        let appointment = appStore.scheduledAppointment(from: appointments)
-        let shieldPolicy = appStore.activeShieldPolicy(from: policies)
+        ZStack {
+            SessionStudioBackground()
 
-        List {
-            if let activeSession {
-                runningCard(activeSession: activeSession, shieldPolicy: shieldPolicy)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-            } else {
-                Section("快速开始") {
-                    SessionDraftForm(draft: $draft, policy: shieldPolicy)
-                    Button("立即开始主链") {
-                        startQuickSession()
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 22) {
+                    sessionHeader
+
+                    if let activeSession {
+                        runningStudio(activeSession)
+                    } else {
+                        draftStudio
                     }
-                    Button("预约 15 分钟后开始") {
-                        scheduleAppointment()
+
+                    if let pendingAppointment {
+                        appointmentStudio(pendingAppointment)
                     }
+
+                    recentSessionsStudio
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 36)
+            }
+        }
+        .navigationTitle("会话")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    private var activeSession: FocusSession? {
+        appStore.runningSession(from: sessions)
+    }
+
+    private var pendingAppointment: Appointment? {
+        appStore.scheduledAppointment(from: appointments)
+    }
+
+    private var activeShieldPolicy: ShieldPolicy? {
+        appStore.activeShieldPolicy(from: policies)
+    }
+
+    private var sessionHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(activeSession == nil ? "Focus Session" : "Session In Motion")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .tracking(2.6)
+                .foregroundStyle(.white.opacity(0.58))
+
+            Text(activeSession?.goal ?? "把时长拨准，再安静地开始。")
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(activeSession == nil ? "新的时间轮负责主节奏，下面只保留真正影响专注质量的设置。" : "当前会话正在运行。完成、标记不合格或主动退出，都在这里处理。")
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.68))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
+    }
+
+    private var draftStudio: some View {
+        VStack(spacing: 18) {
+            SessionStudioCard {
+                VStack(spacing: 22) {
+                    VStack(spacing: 8) {
+                        studioLabel("Duration")
+
+                        Text("\(draft.durationMinutes) 分钟")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .monospacedDigit()
+                    }
+
+                    TimerWheelPicker(
+                        selection: $draft.durationMinutes,
+                        range: 5...180,
+                        step: 5,
+                        style: SessionStudioTheme.wheelStyle
+                    )
+                    .frame(maxWidth: .infinity)
+
+                    Text("\(draft.durationMinutes) min")
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 26)
+                        .padding(.vertical, 14)
+                        .background(.white.opacity(0.1), in: Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke(.white.opacity(0.08), lineWidth: 1)
+                        }
                 }
             }
 
-            if let appointment {
-                Section("当前预约链") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(appointment.goal)
-                            .font(.headline)
-                        Text("开始于 \(appointment.scheduledStartAt.formatted(date: .omitted, time: .shortened))，窗口截止 \(appointment.windowEndAt.formatted(date: .omitted, time: .shortened))")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Button("履约并开始主链") {
-                            fulfillAppointment(appointment)
+            SessionStudioCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    studioLabel("目标")
+
+                    TextField("这段专注要产出什么？", text: $draft.goal)
+                        .textInputAutocapitalization(.never)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 18)
+                        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .stroke(.white.opacity(0.08), lineWidth: 1)
+                        }
+
+                    shieldComposer
+                }
+            }
+
+            HStack(spacing: 14) {
+                SessionActionButton(
+                    title: "立即开始",
+                    subtitle: "主链会话",
+                    tint: SessionStudioTheme.accent,
+                    foreground: SessionStudioTheme.deepInk,
+                    action: startQuickSession
+                )
+
+                SessionActionButton(
+                    title: "预约 15 分钟后",
+                    subtitle: "保留开始窗口",
+                    tint: .white.opacity(0.08),
+                    foreground: .white,
+                    action: scheduleAppointment
+                )
+            }
+        }
+    }
+
+    private var shieldComposer: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                VStack(alignment: .leading, spacing: 6) {
+                    studioLabel("Focus Shield")
+                    Text(draft.shieldEnabled ? "会话启动时应用系统屏蔽" : "这次会话不应用系统屏蔽")
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.64))
+                }
+
+                Spacer()
+
+                Toggle("", isOn: $draft.shieldEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(SessionStudioTheme.accent)
+            }
+
+            if draft.shieldEnabled {
+                if let activeShieldPolicy, activeShieldPolicy.selectedApps.isEmpty == false {
+                    SessionChipRow(values: Array(activeShieldPolicy.selectedApps.prefix(4)))
+                    Text(activeShieldPolicy.selectedApps.count > 4 ? "已选 \(activeShieldPolicy.selectedApps.count) 项，完整列表在设置页维护。" : "已连接设置页中的真实屏蔽策略。")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.56))
+                } else {
+                    Text("还没有可用的屏蔽目标。请先去设置页选择要拦截的 App 与网站。")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.56))
+                }
+            }
+        }
+        .padding(18)
+        .background(SessionStudioTheme.panelStrong.opacity(0.9), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    private func runningStudio(_ activeSession: FocusSession) -> some View {
+        SessionStudioCard {
+            VStack(alignment: .leading, spacing: 22) {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let remaining = max(0, activeSession.durationSec - Int(context.date.timeIntervalSince(activeSession.startAt)))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            SessionPill(title: activeSession.source.label)
+                            SessionPill(title: activeSession.tagName)
+                            if activeSession.shieldEnabled {
+                                SessionPill(title: "Shield On", filled: true)
+                            }
+                        }
+
+                        Text(remaining.clockString)
+                            .font(.system(size: 52, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .monospacedDigit()
+
+                        Text("开始于 \(activeSession.startAt.formatted(date: .omitted, time: .shortened))")
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.58))
+                    }
+                }
+
+                if activeSession.shieldEnabled {
+                    shieldRuntimePanel(activeSession)
+                }
+
+                VStack(spacing: 12) {
+                    SessionActionButton(
+                        title: "完成会话",
+                        subtitle: "提交主链节点",
+                        tint: SessionStudioTheme.accent,
+                        foreground: SessionStudioTheme.deepInk
+                    ) {
+                        try? appStore.completeSession(
+                            activeSession,
+                            sessions: sessions,
+                            nodes: nodes,
+                            context: modelContext
+                        )
+                    }
+
+                    HStack(spacing: 12) {
+                        SessionActionButton(
+                            title: "标记不合格",
+                            subtitle: "记录质量失败",
+                            tint: .white.opacity(0.08),
+                            foreground: .white
+                        ) {
+                            try? appStore.recordQualityFailure(activeSession, context: modelContext)
+                        }
+
+                        SessionActionButton(
+                            title: "退出",
+                            subtitle: "终止当前会话",
+                            tint: Color(red: 0.45, green: 0.17, blue: 0.18),
+                            foreground: .white
+                        ) {
+                            try? appStore.abandonSession(activeSession, context: modelContext)
                         }
                     }
                 }
             }
-
-            Section("最近会话") {
-                if sessions.isEmpty {
-                    Text("还没有会话记录。")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(sessions.prefix(8), id: \.id) { session in
-                        SessionRow(session: session)
-                    }
-                }
-            }
         }
-        .navigationTitle("会话")
     }
 
-    private func runningCard(activeSession: FocusSession, shieldPolicy: ShieldPolicy?) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                let remaining = max(0, activeSession.durationSec - Int(context.date.timeIntervalSince(activeSession.startAt)))
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(activeSession.goal)
-                        .font(.title3.bold())
-                    Text(remaining.clockString)
-                        .font(.system(size: 42, weight: .bold, design: .rounded).monospacedDigit())
-                    Text("\(activeSession.source.label) · \(activeSession.tagName)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
+    private func shieldRuntimePanel(_ activeSession: FocusSession) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            studioLabel("Shield Runtime")
 
-            if activeSession.shieldEnabled {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Focus Shield")
-                        .font(.headline)
-                    Text(shieldPolicy?.selectedApps.joined(separator: "、") ?? "未配置屏蔽 App")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            Text(activeShieldPolicy?.selectedApps.joined(separator: " · ") ?? "未配置屏蔽目标")
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            ForEach(shieldPolicy?.selectedApps ?? [], id: \.self) { app in
-                                Button(app) {
-                                    try? appStore.simulateBlockedAppAttempt(
-                                        appName: app,
-                                        session: activeSession,
-                                        context: modelContext
-                                    )
-                                }
-                                .buttonStyle(.bordered)
+            if let activeShieldPolicy, activeShieldPolicy.selectedApps.isEmpty == false {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(activeShieldPolicy.selectedApps, id: \.self) { app in
+                            Button(app) {
+                                try? appStore.simulateBlockedAppAttempt(
+                                    appName: app,
+                                    session: activeSession,
+                                    context: modelContext
+                                )
+                            }
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(.white.opacity(0.08), in: Capsule())
+                            .overlay {
+                                Capsule()
+                                    .stroke(.white.opacity(0.08), lineWidth: 1)
                             }
                         }
                     }
                 }
             }
+        }
+        .padding(18)
+        .background(SessionStudioTheme.panelStrong.opacity(0.88), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        }
+    }
 
-            HStack {
-                Button("完成会话") {
-                    try? appStore.completeSession(
-                        activeSession,
-                        sessions: sessions,
-                        nodes: nodes,
-                        context: modelContext
-                    )
+    private func appointmentStudio(_ appointment: Appointment) -> some View {
+        SessionStudioCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    studioLabel("当前预约链")
+                    Spacer()
+                    SessionPill(title: "Window")
                 }
-                .buttonStyle(.borderedProminent)
 
-                Button("标记不合格") {
-                    try? appStore.recordQualityFailure(activeSession, context: modelContext)
-                }
-                .buttonStyle(.bordered)
+                Text(appointment.goal)
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
 
-                Button("退出") {
-                    try? appStore.abandonSession(activeSession, context: modelContext)
+                Text("开始于 \(appointment.scheduledStartAt.formatted(date: .omitted, time: .shortened))，窗口截止 \(appointment.windowEndAt.formatted(date: .omitted, time: .shortened))")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.62))
+
+                SessionActionButton(
+                    title: "履约并开始",
+                    subtitle: "接入主链",
+                    tint: .white.opacity(0.08),
+                    foreground: .white
+                ) {
+                    fulfillAppointment(appointment)
                 }
-                .buttonStyle(.bordered)
-                .tint(.red)
             }
         }
-        .padding(20)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    private var recentSessionsStudio: some View {
+        SessionStudioCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    studioLabel("最近会话")
+                    Spacer()
+                    Text("\(sessions.count)")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.62))
+                        .monospacedDigit()
+                }
+
+                if sessions.isEmpty {
+                    Text("还没有会话记录。开始第一段高质量专注，历史才有意义。")
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.58))
+                } else {
+                    VStack(spacing: 12) {
+                        ForEach(Array(sessions.prefix(6)), id: \.id) { session in
+                            SessionRow(session: session)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func studioLabel(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .tracking(2.2)
+            .foregroundStyle(.white.opacity(0.48))
     }
 
     private func startQuickSession() {
@@ -647,6 +874,169 @@ private struct SessionView: View {
             source: .appointment,
             appointment: appointment
         )
+    }
+}
+
+private enum SessionStudioTheme {
+    static let deepInk = Color(red: 0.08, green: 0.12, blue: 0.19)
+    static let deepForest = Color(red: 0.10, green: 0.21, blue: 0.18)
+    static let panel = Color.white.opacity(0.055)
+    static let panelStrong = Color.white.opacity(0.07)
+    static let accent = Color(hue: 0.36, saturation: 0.58, brightness: 0.88)
+    static let wheelStyle = TimerWheelPickerStyle(
+        colors: .init(
+            activeTint: .white,
+            inactiveTint: Color.white.opacity(0.12),
+            ringBackground: accent,
+            tickGradient: Gradient(colors: [
+                Color(hue: 0.57, saturation: 0.46, brightness: 0.86),
+                Color(hue: 0.66, saturation: 0.82, brightness: 0.94)
+            ]),
+            valueGradient: Gradient(colors: [
+                Color(hue: 0.48, saturation: 0.45, brightness: 0.88),
+                Color(hue: 0.51, saturation: 0.62, brightness: 0.97)
+            ])
+        ),
+        layout: .init(
+            dialHeight: 214,
+            dialScale: 0.9,
+            ringThickness: 44,
+            ringBackgroundExtraWidth: 10,
+            indicatorHeight: 28,
+            indicatorWidth: 5,
+            indicatorDotSize: 10,
+            tickWidth: 3.3,
+            tickSlotWidth: 5.2,
+            gapBetweenTicks: -2.6,
+            largeTickFrequency: 3,
+            largeTickRatio: 0.68,
+            smallTickRatio: 0.32
+        ),
+        typography: .init(
+            valueFontSize: 66,
+            unitFontSize: 14,
+            unitLabel: "MIN"
+        )
+    )
+}
+
+private struct SessionStudioBackground: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    SessionStudioTheme.deepInk,
+                    Color(red: 0.11, green: 0.18, blue: 0.24),
+                    SessionStudioTheme.deepForest
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            RadialGradient(
+                colors: [
+                    SessionStudioTheme.accent.opacity(0.30),
+                    .clear
+                ],
+                center: .center,
+                startRadius: 20,
+                endRadius: 360
+            )
+            .blur(radius: 26)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+private struct SessionStudioCard<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(22)
+        .background(SessionStudioTheme.panel, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(.white.opacity(0.10), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.18), radius: 24, y: 16)
+    }
+}
+
+private struct SessionActionButton: View {
+    let title: String
+    let subtitle: String
+    let tint: Color
+    let foreground: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(foreground.opacity(0.74))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .background(tint, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(.white.opacity(foreground == .white ? 0.08 : 0), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(foreground)
+    }
+}
+
+private struct SessionChipRow: View {
+    let values: [String]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(values, id: \.self) { value in
+                    Text(value)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.88))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(.white.opacity(0.08), in: Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke(.white.opacity(0.08), lineWidth: 1)
+                        }
+                }
+            }
+        }
+    }
+}
+
+private struct SessionPill: View {
+    let title: String
+    var filled = false
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 12, weight: .bold, design: .rounded))
+            .foregroundStyle(filled ? SessionStudioTheme.deepInk : .white.opacity(0.86))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                filled ? AnyShapeStyle(SessionStudioTheme.accent) : AnyShapeStyle(.white.opacity(0.07)),
+                in: Capsule()
+            )
+            .overlay {
+                Capsule()
+                    .stroke(.white.opacity(filled ? 0 : 0.08), lineWidth: 1)
+            }
     }
 }
 
@@ -1160,17 +1550,67 @@ private struct SessionRow: View {
     let session: FocusSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        HStack(spacing: 14) {
+            Circle()
+                .fill(statusTint.opacity(0.22))
+                .frame(width: 44, height: 44)
+                .overlay {
+                    Image(systemName: statusIcon)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(statusTint)
+                }
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text(session.goal)
-                Spacer()
-                Text(session.status.rawValue)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(session.status == .completed ? .green : session.status == .failed ? .red : .secondary)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                Text("\(session.source.label) · \(session.durationSec.clockString)")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.54))
             }
-            Text("\(session.source.label) · \(session.durationSec.clockString)")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(session.status.rawValue)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(statusTint)
+                Text(session.startAt.formatted(date: .omitted, time: .shortened))
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.42))
+            }
+        }
+        .padding(16)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    private var statusTint: Color {
+        switch session.status {
+        case .completed:
+            SessionStudioTheme.accent
+        case .failed:
+            Color(red: 0.93, green: 0.43, blue: 0.43)
+        case .running:
+            Color(red: 0.47, green: 0.78, blue: 0.96)
+        default:
+            .white
+        }
+    }
+
+    private var statusIcon: String {
+        switch session.status {
+        case .completed:
+            "checkmark"
+        case .failed:
+            "xmark"
+        case .running:
+            "timer"
+        default:
+            "circle"
         }
     }
 }

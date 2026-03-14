@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		877F57538F14235B5B9B6847 /* fluxfocusClip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = A77C561C6D6FA5C3CB6FE63D /* fluxfocusClip.app */; };
 		F31BCB021FD62561275CB79E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 24993E31A3401B8ED420E4D7 /* Foundation.framework */; };
+		F95DB7752F65ED9500E80673 /* WheelPickerKit in Frameworks */ = {isa = PBXBuildFile; productRef = F95DB7742F65ED9500E80673 /* WheelPickerKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -90,6 +91,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F95DB7752F65ED9500E80673 /* WheelPickerKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -172,6 +174,9 @@
 				F9F6EC042F62F93C0049218E /* fluxfocus */,
 			);
 			name = fluxfocus;
+			packageProductDependencies = (
+				F95DB7742F65ED9500E80673 /* WheelPickerKit */,
+			);
 			productName = fluxfocus;
 			productReference = F9F6EC022F62F93C0049218E /* fluxfocus.app */;
 			productType = "com.apple.product-type.application";
@@ -203,6 +208,9 @@
 			);
 			mainGroup = F9F6EBF92F62F93C0049218E;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F95DB7732F65ED6E00E80673 /* XCRemoteSwiftPackageReference "TimePickerForSwiftUI" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F9F6EC032F62F93C0049218E /* Products */;
 			projectDirPath = "";
@@ -267,7 +275,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = fluxfocusClip/fluxfocusClip.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = RZD9M68FZ9;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = fluxfocusClip/Info.plist;
@@ -304,7 +312,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = fluxfocusClip/fluxfocusClip.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = RZD9M68FZ9;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = fluxfocusClip/Info.plist;
@@ -461,7 +469,7 @@
 				CODE_SIGN_ENTITLEMENTS = fluxfocus/fluxfocus.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = RZD9M68FZ9;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -496,7 +504,7 @@
 				CODE_SIGN_ENTITLEMENTS = fluxfocus/fluxfocus.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = RZD9M68FZ9;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -553,6 +561,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F95DB7732F65ED6E00E80673 /* XCRemoteSwiftPackageReference "TimePickerForSwiftUI" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Alcu1n/TimePickerForSwiftUI";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F95DB7742F65ED9500E80673 /* WheelPickerKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F95DB7732F65ED6E00E80673 /* XCRemoteSwiftPackageReference "TimePickerForSwiftUI" */;
+			productName = WheelPickerKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = F9F6EBFA2F62F93C0049218E /* Project object */;
 }

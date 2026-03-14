@@ -1,0 +1,15 @@
+{
+  "originHash" : "93e4f04b046fbd943d061b2dd492cb217db676bfde893f253b74ed71628cfcf7",
+  "pins" : [
+    {
+      "identity" : "timepickerforswiftui",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Alcu1n/TimePickerForSwiftUI",
+      "state" : {
+        "revision" : "eae817590d8b50f1d2c8c642e9807b569fe2d79d",
+        "version" : "1.0.0"
+      }
+    }
+  ],
+  "version" : 3
+}
