@@ -1,5 +1,5 @@
 // [IN]: CoreNFC, Foundation, and local NFC tag snapshot models / CoreNFC、Foundation 与本地 NFC 标签快照模型
-// [OUT]: Invocation scans, raw NDEF reads, URL+snapshot writes, and foreground scan-rewrite transactions / invocation 扫描、原始 NDEF 读取、URL+快照写入与前台扫描回写事务
+// [OUT]: Invocation scans, raw NDEF reads, URL+snapshot writes, foreground scan-rewrite transactions, and cancel-safe completion delivery / invocation 扫描、原始 NDEF 读取、URL+快照写入、前台扫描回写事务与取消安全的结果回传
 // [POS]: Device-facing NFC bridge that keeps App Clip URL routing intact while optionally mirroring compact chain snapshots / 在保持 App Clip URL 路由不变的同时可选镜像紧凑链条快照的设备层 NFC 桥
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
@@ -35,6 +35,7 @@ struct NFCNDEFWriteRequest {
 enum NFCManagerError: LocalizedError {
     case unavailable
     case busy
+    case cancelled
     case multipleTags
     case unsupportedTag
     case emptyMessage
@@ -47,6 +48,7 @@ enum NFCManagerError: LocalizedError {
         switch self {
         case .unavailable: "当前设备不支持 NFC 读写。"
         case .busy: "NFC 会话进行中，请稍后再试。"
+        case .cancelled: "已取消 NFC 会话。"
         case .multipleTags: "请一次只贴近一张 NFC 标签。"
         case .unsupportedTag: "检测到的标签不支持 NDEF 读写。"
         case .emptyMessage: "标签中没有可读取的 NDEF 内容。"
@@ -66,6 +68,7 @@ final class NFCManager: NSObject, ObservableObject {
 
     private var session: NFCTagReaderSession?
     private var operation: Operation?
+    private var isClosingSession = false
 
     private enum Operation {
         case scanInvocation(prompt: String, rewrite: RewriteHandler?, completion: (Result<NFCScanPayload, Error>) -> Void)
@@ -164,6 +167,7 @@ final class NFCManager: NSObject, ObservableObject {
         let currentOperation = operation
         operation = nil
         session = nil
+        isClosingSession = false
 
         switch result {
         case .success(let payload):
@@ -194,6 +198,7 @@ final class NFCManager: NSObject, ObservableObject {
         session: NFCTagReaderSession,
         alertMessage: String
     ) {
+        isClosingSession = true
         session.alertMessage = alertMessage
         session.invalidate()
         DispatchQueue.main.async {
@@ -206,6 +211,7 @@ final class NFCManager: NSObject, ObservableObject {
         warning: String,
         session: NFCTagReaderSession
     ) {
+        isClosingSession = true
         session.alertMessage = "标签已识别，但快照未回写"
         session.invalidate()
         DispatchQueue.main.async {
@@ -217,6 +223,7 @@ final class NFCManager: NSObject, ObservableObject {
     }
 
     private func fail(_ error: Error, session: NFCTagReaderSession, message: String? = nil) {
+        isClosingSession = true
         session.invalidate(errorMessage: message ?? error.localizedDescription)
         DispatchQueue.main.async {
             self.deliver(result: .failure(error), alertMessage: nil)
@@ -431,18 +438,18 @@ extension NFCManager: NFCTagReaderSessionDelegate {
 
     func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
         DispatchQueue.main.async {
-            defer {
-                self.session = nil
-                self.operation = nil
+            if self.isClosingSession {
+                self.isClosingSession = false
+                return
             }
 
             let nsError = error as NSError
             guard nsError.code != 201 else {
-                self.statusMessage = "已取消 NFC 会话"
+                self.deliver(result: .failure(NFCManagerError.cancelled), alertMessage: nil)
                 return
             }
 
-            self.statusMessage = error.localizedDescription
+            self.deliver(result: .failure(error), alertMessage: nil)
         }
     }
 

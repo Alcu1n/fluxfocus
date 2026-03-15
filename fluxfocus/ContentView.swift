@@ -1,6 +1,6 @@
 // [IN]: SwiftUI, UIKit hosting, SwiftData queries, AppStore service, NFCManager, FamilyControls, WheelPickerKit, StudioChrome, and local focus models / SwiftUI、UIKit 宿主、SwiftData 查询、AppStore 服务、NFCManager、FamilyControls、WheelPickerKit、StudioChrome 与本地专注模型
-// [OUT]: Unified studio-style tab UI, chain-first home surfaces, NFC start/end routing, minute-level session drafting, and precedent-aware session controls / 统一 studio 风格的标签页 UI、链条优先首页表面、NFC 开始/结束路由、分钟级会话编排与判例感知会话控制
-// [POS]: Primary SwiftUI composition root for the full app experience, shared studio surfaces, NFC-governed session lifecycle, and the wheel-first session studio / 完整应用体验、共享 studio 视觉表面、NFC 治理会话生命周期与滚轮优先会话控制台的主要 SwiftUI 组合根
+// [OUT]: Unified studio-style tab UI, chain-first home surfaces, NFC start/end routing, minute-level session drafting, flatter session sections, read-only shield runtime avatars, foreground-scan guidance, and visibility-aware precedent controls without local fail shortcuts / 统一 studio 风格的标签页 UI、链条优先首页表面、NFC 开始/结束路由、分钟级会话编排、更扁平的会话分区、只读 shield 运行态图标、前台扫描引导与无本地失败捷径的判例控制
+// [POS]: Primary SwiftUI composition root for the full app experience, shared studio surfaces, NFC-governed session lifecycle, and the wheel-first session studio with flatter section hierarchy and a read-only shield runtime rail / 完整应用体验、共享 studio 视觉表面、NFC 治理会话生命周期与采用更扁平分区层级及只读 shield 运行态 rail 的滚轮优先会话控制台的主要 SwiftUI 组合根
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
 
@@ -27,16 +27,15 @@ struct ContentView: View {
         var prompt: String {
             switch self {
             case .manualExit:
-                "将 iPhone 顶部靠近当前专注标签，记录主动退出"
+                "将 iPhone 顶部靠近当前专注标签，手动记录主动退出"
             case .completion:
-                "将 iPhone 顶部靠近当前专注标签，完成会话并回写快照"
+                "将 iPhone 顶部靠近当前专注标签，手动完成会话并回写快照"
             }
         }
     }
 
     @Environment(AppStore.self) private var appStore
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var focusShieldController: FocusShieldController
 
     @StateObject private var nfcManager = NFCManager()
@@ -54,7 +53,6 @@ struct ContentView: View {
 
     @State private var quickStartDraft = SessionDraft()
     @State private var showInvocationSheet = false
-    @State private var previousScenePhaseName = "active"
     @State private var nfcAlert: NFCAlert?
     @State private var selectedTab: RootTab = .home
     @State private var armedNFCScanMode: ArmedNFCScanMode?
@@ -160,17 +158,6 @@ struct ContentView: View {
         .task(id: shieldSyncKey) {
             syncFocusShield()
         }
-        .onChange(of: scenePhase) { oldValue, newValue in
-            let oldName = previousScenePhaseName
-            previousScenePhaseName = newValue.label
-            try? appStore.simulateScenePhaseChange(
-                from: oldName,
-                to: newValue.label,
-                sessions: sessions,
-                nfcScanArmed: armedNFCScanMode != nil,
-                context: modelContext
-            )
-        }
         .onOpenURL { url in
             handleInvocationURL(url)
         }
@@ -189,7 +176,7 @@ struct ContentView: View {
     }
 
     private var pendingViolation: ViolationEvent? {
-        violations.first(where: { $0.decisionStatus == .pending })
+        violations.first(where: { $0.decisionStatus == .pending && $0.type.isUserVisible })
     }
 
     private var shieldSyncKey: String {
@@ -365,7 +352,7 @@ struct ContentView: View {
                 guard activeSession.status == .awaitingNFCCompletion else {
                     nfcAlert = NFCAlert(
                         title: "尚未到可完结状态",
-                        message: "会话还在进行中。若要提前结束，请使用“准备 NFC 退出”。"
+                        message: "会话还在进行中。若系统没有自动把 NFC 路由回当前会话，可使用手动扫描退出。"
                     )
                     return nil
                 }
@@ -427,17 +414,6 @@ private struct NFCAlert: Identifiable {
     let id = UUID()
     let title: String
     let message: String
-}
-
-extension ScenePhase {
-    fileprivate var label: String {
-        switch self {
-        case .active: "active"
-        case .background: "background"
-        case .inactive: "inactive"
-        @unknown default: "unknown"
-        }
-    }
 }
 
 private struct HomeView: View {
@@ -785,45 +761,43 @@ private struct SessionView: View {
 
     private var draftStudio: some View {
         VStack(spacing: 16) {
-            StudioCard(emphasis: true) {
-                VStack(alignment: .leading, spacing: 18) {
-                    StudioSectionLabel(title: "Duration")
+            VStack(alignment: .leading, spacing: 18) {
+                StudioSectionLabel(title: "Duration")
 
-                    TextField("这段专注要产出什么？", text: $draft.goal)
-                        .textInputAutocapitalization(.never)
-                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                TextField("这段专注要产出什么？", text: $draft.goal)
+                    .textInputAutocapitalization(.never)
+                    .font(.system(size: 21, weight: .bold, design: .rounded))
+                    .foregroundStyle(StudioTheme.textPrimary)
+                    .studioTextEntry()
+
+                TimerWheelPicker(
+                    selection: $draft.durationMinutes,
+                    range: 5...180,
+                    step: 1,
+                    style: StudioTheme.wheelStyle
+                )
+                .frame(maxWidth: .infinity)
+
+                HStack(alignment: .center, spacing: 12) {
+                    Text("\(draft.durationMinutes) min")
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundStyle(StudioTheme.textPrimary)
-                        .studioTextEntry()
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 14)
+                        .background(.white.opacity(0.1), in: Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke(.white.opacity(0.08), lineWidth: 1)
+                        }
 
-                    TimerWheelPicker(
-                        selection: $draft.durationMinutes,
-                        range: 5...180,
-                        step: 1,
-                        style: StudioTheme.wheelStyle
+                    SessionInlineButton(
+                        title: "立即开始",
+                        tone: .primary,
+                        action: startQuickSession
                     )
-                    .frame(maxWidth: .infinity)
-
-                    HStack(alignment: .center, spacing: 12) {
-                        Text("\(draft.durationMinutes) min")
-                            .font(.system(size: 26, weight: .bold, design: .rounded))
-                            .foregroundStyle(StudioTheme.textPrimary)
-                            .padding(.horizontal, 22)
-                            .padding(.vertical, 14)
-                            .background(.white.opacity(0.1), in: Capsule())
-                            .overlay {
-                                Capsule()
-                                    .stroke(.white.opacity(0.08), lineWidth: 1)
-                            }
-
-                        SessionInlineButton(
-                            title: "立即开始",
-                            tone: .primary,
-                            action: startQuickSession
-                        )
-                    }
-
-                    compactShieldComposer
                 }
+
+                compactShieldComposer
             }
 
             SessionInlineButton(
@@ -950,14 +924,16 @@ private struct SessionView: View {
                 }
 
                 if activeSession.shieldEnabled {
-                    shieldRuntimePanel(activeSession)
+                    shieldRuntimePanel
                 }
 
                 VStack(spacing: 12) {
+                    nfcRouteGuidancePanel(activeSession)
+
                     if activeSession.status == .running {
                         StudioActionButton(
-                            title: isNFCScanArmed ? "等待 NFC 扫描" : "准备 NFC 退出",
-                            subtitle: "扫描同一张标签后进入“下必为例”",
+                            title: isNFCScanArmed ? "等待 NFC 扫描" : "扫描 NFC 退出",
+                            subtitle: "在 App 前台扫描同一张标签后进入“下必为例”",
                             tone: .danger
                         ) {
                             prepareNFCExit()
@@ -965,8 +941,8 @@ private struct SessionView: View {
                         .disabled(isNFCScanArmed)
                     } else if activeSession.status == .awaitingNFCCompletion {
                         StudioActionButton(
-                            title: isNFCScanArmed ? "等待 NFC 扫描" : "准备 NFC 完结",
-                            subtitle: "扫描同一张标签后提交主链节点",
+                            title: isNFCScanArmed ? "等待 NFC 扫描" : "扫描 NFC 完结",
+                            subtitle: "在 App 前台扫描同一张标签后提交主链节点",
                             tone: .primary
                         ) {
                             prepareNFCCompletion()
@@ -974,14 +950,33 @@ private struct SessionView: View {
                         .disabled(isNFCScanArmed)
                     }
 
-                    StudioActionButton(
-                        title: "标记不合格",
-                        subtitle: "记录质量失败",
-                        tone: .secondary
-                    ) {
-                        try? appStore.recordQualityFailure(activeSession, context: modelContext)
-                    }
                 }
+            }
+        }
+    }
+
+    private func nfcRouteGuidancePanel(_ activeSession: FocusSession) -> some View {
+        StudioInsetPanel {
+            VStack(alignment: .leading, spacing: 10) {
+                StudioSectionLabel(title: activeSession.status == .awaitingNFCCompletion ? "Complete via NFC" : "Exit via NFC")
+
+                Text(
+                    activeSession.status == .awaitingNFCCompletion
+                    ? "当前停留在 App 前台时，请点击下方按钮开始扫描，再触碰同一张 NFC 标签完成会话。"
+                    : "当前停留在 App 前台时，请点击下方按钮开始扫描，再触碰同一张 NFC 标签进入“下必为例”。"
+                )
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundStyle(StudioTheme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Text(
+                    isNFCScanArmed
+                    ? "扫描已开启。请将 iPhone 顶部靠近当前标签完成本次读卡。"
+                    : "如果你已经回到桌面、锁屏或系统别处，NFC 仍可能先弹出系统 clip card；点开后会进入对应退出或完结流程。"
+                )
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(StudioTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -999,39 +994,34 @@ private struct SessionView: View {
         }
     }
 
-    private func shieldRuntimePanel(_ activeSession: FocusSession) -> some View {
+    private var runtimeShieldSummary: [String] {
+        var segments: [String] = []
+
+        if focusShieldController.selectedCategoryTokens.isEmpty == false {
+            segments.append("分类 \(focusShieldController.selectedCategoryTokens.count)")
+        }
+        if focusShieldController.selectedWebDomainTokens.isEmpty == false {
+            segments.append("网站 \(focusShieldController.selectedWebDomainTokens.count)")
+        }
+        if focusShieldController.selectedApplicationTokens.isEmpty,
+            let activeShieldPolicy,
+            activeShieldPolicy.selectedApps.isEmpty == false
+        {
+            segments.append(contentsOf: activeShieldPolicy.selectedApps)
+        }
+
+        return segments
+    }
+
+    private var shieldRuntimePanel: some View {
         StudioInsetPanel {
             StudioSectionLabel(title: "Shield Runtime")
 
-            Text(activeShieldPolicy?.selectedApps.joined(separator: " · ") ?? "未配置屏蔽目标")
-                .font(.system(size: 15, weight: .medium, design: .rounded))
-                .foregroundStyle(StudioTheme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let activeShieldPolicy, activeShieldPolicy.selectedApps.isEmpty == false {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(activeShieldPolicy.selectedApps, id: \.self) { app in
-                            Button(app) {
-                                try? appStore.simulateBlockedAppAttempt(
-                                    appName: app,
-                                    session: activeSession,
-                                    context: modelContext
-                                )
-                            }
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(.white.opacity(0.08), in: Capsule())
-                            .overlay {
-                                Capsule()
-                                    .stroke(.white.opacity(0.08), lineWidth: 1)
-                            }
-                        }
-                    }
-                }
-            }
+            ShieldSelectionRail(
+                applicationTokens: focusShieldController.selectedApplicationTokens,
+                summaryItems: runtimeShieldSummary,
+                fallbackText: "当前会话启用了 Focus Shield。"
+            )
         }
     }
 
@@ -1066,27 +1056,25 @@ private struct SessionView: View {
     }
 
     private var recentSessionsStudio: some View {
-        StudioCard {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    StudioSectionLabel(title: "最近会话")
-                    Spacer()
-                    Text("\(sessions.count)")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(StudioTheme.textSecondary)
-                        .monospacedDigit()
-                }
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                StudioSectionLabel(title: "最近会话")
+                Spacer()
+                Text("\(sessions.count)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(StudioTheme.textSecondary)
+                    .monospacedDigit()
+            }
 
-                if sessions.isEmpty {
-                    StudioEmptyState(
-                        title: "还没有会话记录",
-                        message: "开始第一段高质量专注，历史才有意义。"
-                    )
-                } else {
-                    VStack(spacing: 12) {
-                        ForEach(Array(sessions.prefix(6)), id: \.id) { session in
-                            SessionRow(session: session)
-                        }
+            if sessions.isEmpty {
+                StudioEmptyState(
+                    title: "还没有会话记录",
+                    message: "开始第一段高质量专注，历史才有意义。"
+                )
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(Array(sessions.prefix(6)), id: \.id) { session in
+                        SessionRow(session: session)
                     }
                 }
             }
@@ -1201,7 +1189,7 @@ private struct ShieldSelectionRail: View {
     let applicationTokens: [ApplicationToken]
     let summaryItems: [String]
     let fallbackText: String
-    let addAction: () -> Void
+    var addAction: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -1250,19 +1238,21 @@ private struct ShieldSelectionRail: View {
                 }
             }
 
-            Button(action: addAction) {
-                Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 38, height: 38)
-                    .background(Color.white.opacity(0.08), in: Circle())
-                    .overlay {
-                        Circle()
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    }
+            if let addAction {
+                Button(action: addAction) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(Color.white.opacity(0.08), in: Circle())
+                        .overlay {
+                            Circle()
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("添加屏蔽目标")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("添加屏蔽目标")
         }
     }
 }
@@ -1605,7 +1595,15 @@ private struct PrecedentsView: View {
     let rules: [PrecedentRule]
 
     private var pendingViolations: [ViolationEvent] {
-        violations.filter { $0.decisionStatus == .pending }
+        visibleViolations.filter { $0.decisionStatus == .pending }
+    }
+
+    private var visibleViolations: [ViolationEvent] {
+        violations.filter { $0.type.isUserVisible }
+    }
+
+    private var visibleRules: [PrecedentRule] {
+        rules.filter { $0.violationType.isUserVisible }
     }
 
     var body: some View {
@@ -1625,7 +1623,7 @@ private struct PrecedentsView: View {
                                     title: "待裁决 \(pendingViolations.count)",
                                     tone: pendingViolations.isEmpty ? .neutral : .danger
                                 )
-                                StudioCapsuleLabel(title: "规则 \(rules.count)")
+                                StudioCapsuleLabel(title: "规则 \(visibleRules.count)")
                             }
                         }
                     }
@@ -1635,17 +1633,17 @@ private struct PrecedentsView: View {
                             HStack {
                                 StudioSectionLabel(title: "违规事件")
                                 Spacer()
-                                StudioCapsuleLabel(title: "\(violations.count)")
+                                StudioCapsuleLabel(title: "\(visibleViolations.count)")
                             }
 
-                            if violations.isEmpty {
+                            if visibleViolations.isEmpty {
                                 StudioEmptyState(
                                     title: "暂无违规事件",
                                     message: "保持会话完成质量，这里就应该尽量为空。"
                                 )
                             } else {
                                 VStack(spacing: 12) {
-                                    ForEach(violations, id: \.id) { event in
+                                    ForEach(visibleViolations, id: \.id) { event in
                                         ViolationEventRow(event: event)
                                     }
                                 }
@@ -1658,17 +1656,17 @@ private struct PrecedentsView: View {
                             HStack {
                                 StudioSectionLabel(title: "生效规则")
                                 Spacer()
-                                StudioCapsuleLabel(title: "\(rules.count)")
+                                StudioCapsuleLabel(title: "\(visibleRules.count)")
                             }
 
-                            if rules.isEmpty {
+                            if visibleRules.isEmpty {
                                 StudioEmptyState(
                                     title: "暂无判例规则",
                                     message: "只有在做出裁决后，这里才会形成真正的规则边界。"
                                 )
                             } else {
                                 VStack(spacing: 12) {
-                                    ForEach(rules, id: \.id) { rule in
+                                    ForEach(visibleRules, id: \.id) { rule in
                                         PrecedentRuleRow(rule: rule)
                                     }
                                 }

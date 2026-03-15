@@ -1,5 +1,5 @@
 // [IN]: Foundation and SwiftData model macros / Foundation 与 SwiftData 模型宏
-// [OUT]: Persistent entities plus lightweight dashboard, NFC snapshot, session, and home-chain visualization value types / 持久化实体，以及轻量看板、NFC 快照、会话与首页链条可视化值类型
+// [OUT]: Persistent entities plus lightweight dashboard, NFC snapshot, session, and visibility-aware violation value types / 持久化实体，以及轻量看板、NFC 快照、会话与带可见性语义的违规值类型
 // [POS]: Canonical local schema for tags, sessions, violations, precedent reasons, configuration, and derived home-chain data / 标签、会话、违规、判例原因、配置与派生首页链条数据的本地规范数据模式
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
@@ -59,6 +59,14 @@ enum ViolationType: String, Codable, CaseIterable, Identifiable {
     case appointmentMissed
 
     var id: String { rawValue }
+
+    var isDeprecated: Bool {
+        self == .longBackground
+    }
+
+    var isUserVisible: Bool {
+        !isDeprecated
+    }
 
     var label: String {
         switch self {

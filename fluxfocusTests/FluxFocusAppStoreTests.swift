@@ -1,5 +1,5 @@
 // [IN]: XCTest and the full app module under test / XCTest 与被测完整应用模块
-// [OUT]: Deterministic unit coverage for NFC-governed lifecycle rules, precedent normalization, and snapshot encoding / 覆盖 NFC 治理生命周期规则、判例归一化与快照编码的确定性单测
+// [OUT]: Deterministic unit coverage for NFC-governed lifecycle rules, precedent normalization, snapshot encoding, and violation visibility contracts / 覆盖 NFC 治理生命周期规则、判例归一化、快照编码与违规可见性契约的确定性单测
 // [POS]: Fast contract checks for pure domain paths that should not regress during UI or persistence iteration / 在 UI 或持久化持续迭代时不应回归的纯领域路径快速契约检查
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
@@ -117,5 +117,11 @@ final class FluxFocusAppStoreTests: XCTestCase {
             ),
             .completeAwaitingSession
         )
+    }
+
+    func testDeprecatedLongBackgroundViolationIsHiddenFromUIContracts() {
+        XCTAssertTrue(ViolationType.longBackground.isDeprecated)
+        XCTAssertFalse(ViolationType.longBackground.isUserVisible)
+        XCTAssertTrue(ViolationType.manualExit.isUserVisible)
     }
 }

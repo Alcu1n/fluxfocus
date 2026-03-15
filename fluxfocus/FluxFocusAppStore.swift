@@ -1,5 +1,5 @@
-// [IN]: Foundation, CryptoKit, SwiftData, app models and NFC/App Clip URL rules / Foundation、CryptoKit、SwiftData、应用模型与 NFC/App Clip URL 规则
-// [OUT]: AppStore state orchestration, short invocation URL generation, NFC-driven session mutations, precedent handling, and derived home-chain/tag snapshots / AppStore 状态编排、短 invocation URL 生成、NFC 驱动的会话变更、判例处理与派生首页/标签快照
+// [IN]: Foundation, CryptoKit, SwiftData, app models, and NFC/App Clip URL rules / Foundation、CryptoKit、SwiftData、应用模型与 NFC/App Clip URL 规则
+// [OUT]: AppStore state orchestration, short invocation URL generation, NFC-driven session mutations, precedent handling, legacy-violation cleanup, and derived home-chain/tag snapshots / AppStore 状态编排、短 invocation URL 生成、NFC 驱动的会话变更、判例处理、遗留违规清理与派生首页/标签快照
 // [POS]: Main domain service for local MVP state, invocation routing, NFC-governed lifecycle, and dashboard derivation / 本地 MVP 状态、invocation 路由、NFC 治理生命周期与看板派生的主领域服务
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
@@ -49,7 +49,6 @@ final class AppStore {
     ]
 
     private(set) var didBootstrap = false
-    private var backgroundEnteredAt: Date?
     private let invocationPathPrefix = "i"
     private let fullAppHandoffScheme = "fluxfocus"
     private let fullAppHandoffHost = "focus"
@@ -92,6 +91,7 @@ final class AppStore {
             )
         }
 
+        try purgeDeprecatedViolationArtifacts(context: context)
         try expireOverdueAppointments(context: context, now: .now)
         try context.save()
         didBootstrap = true
@@ -328,43 +328,6 @@ final class AppStore {
             recentNodes: recentNodes,
             dailyPulses: dailyPulses
         )
-    }
-
-    func simulateScenePhaseChange(
-        from oldPhase: String,
-        to newPhase: String,
-        sessions: [FocusSession],
-        nfcScanArmed: Bool,
-        context: ModelContext
-    ) throws {
-        guard let activeSession = activeSession(from: sessions) else {
-            backgroundEnteredAt = nil
-            return
-        }
-
-        guard activeSession.status == .running, nfcScanArmed == false else {
-            backgroundEnteredAt = nil
-            return
-        }
-
-        if oldPhase == "active", newPhase != "active" {
-            backgroundEnteredAt = .now
-            return
-        }
-
-        if oldPhase != "active", newPhase == "active", let backgroundEnteredAt {
-            let delta = Int(Date.now.timeIntervalSince(backgroundEnteredAt))
-            self.backgroundEnteredAt = nil
-            if delta >= 45 {
-                try recordViolation(
-                    type: .longBackground,
-                    payload: "离开前台 \(delta) 秒",
-                    session: activeSession,
-                    appointment: nil,
-                    context: context
-                )
-            }
-        }
     }
 
     func startSession(
@@ -727,6 +690,8 @@ final class AppStore {
         appointment: Appointment?,
         context: ModelContext
     ) throws {
+        guard type.isDeprecated == false else { return }
+
         let rules = try context.fetch(FetchDescriptor<PrecedentRule>())
         let autoAllow =
             type == .manualExit
@@ -768,6 +733,19 @@ final class AppStore {
         }
 
         try context.save()
+    }
+
+    private func purgeDeprecatedViolationArtifacts(context: ModelContext) throws {
+        let events = try context.fetch(FetchDescriptor<ViolationEvent>())
+        let rules = try context.fetch(FetchDescriptor<PrecedentRule>())
+
+        for event in events where event.type.isDeprecated {
+            context.delete(event)
+        }
+
+        for rule in rules where rule.violationType.isDeprecated {
+            context.delete(rule)
+        }
     }
 
     private func fetchAppointments(context: ModelContext) -> [Appointment] {
