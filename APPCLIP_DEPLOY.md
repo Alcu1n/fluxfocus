@@ -22,10 +22,14 @@
 
 - App Store Connect should register a short App Clip Experience URL such as `https://fluxfocusclip.lraitech.com`.  
   App Store Connect 应注册短 App Clip Experience URL，例如 `https://fluxfocusclip.lraitech.com`。
-- Each physical NFC tag should store its own invocation URL under `/i/<tagPublicId>`.  
-  每张物理 NFC 标签应写入各自的 `/i/<tagPublicId>` invocation URL。
+- Each physical NFC tag should store a dual-record NDEF payload whose first record is the invocation URL under `/i/<tagPublicId>`.  
+  每张物理 NFC 标签都应写入双记录 NDEF 载荷，其中第 1 条记录是 `/i/<tagPublicId>` invocation URL。
+- The optional second NDEF record may store a compact FluxFocus snapshot such as `ff1|m=12|a=3|p=abcdef123456|s=run|t=1710000000|d=45|x=12345678`.  
+  可选的第 2 条 NDEF 记录可以存放紧凑的 FluxFocus 快照，例如 `ff1|m=12|a=3|p=abcdef123456|s=run|t=1710000000|d=45|x=12345678`。
 - Do not append long signature hashes to the public invocation URL.  
   不要在公开 invocation URL 上追加长签名哈希。
+- Do not move the invocation URL away from record 1, because background App Clip routing depends on the first URL record remaining stable.  
+  不要把 invocation URL 挪出第 1 条记录，因为后台 App Clip 路由依赖首条 URL 记录保持稳定。
 - For side-loaded development builds, the App Clip can hand off to the full app via `fluxfocus://focus/<tagPublicId>`.  
   对于侧载开发构建，App Clip 可通过 `fluxfocus://focus/<tagPublicId>` 移交到完整 App。
 
@@ -33,8 +37,18 @@ Example / 示例:
 
 ```text
 Experience URL: https://fluxfocusclip.lraitech.com
-NFC tag URL:    https://fluxfocusclip.lraitech.com/i/desk-altar-001
+NDEF record 1:  https://fluxfocusclip.lraitech.com/i/desk-altar-001
+NDEF record 2:  ff1|m=12|a=3|p=abcdef123456|s=idle|t=1710000000|d=0|x=12345678
 ```
+
+## Tag Capacity And Write Mode / 标签容量与写入模式
+
+- Use rewritable NFC tags in production, not permanently locked tags.  
+  生产环境请使用可重写 NFC 标签，不要默认锁死为只读。
+- FluxFocus treats the local SwiftData store as the authority; snapshot write failures must degrade to warnings rather than corrupt local session state.  
+  FluxFocus 以本地 SwiftData 为权威账本；快照写入失败必须降级为告警，而不能破坏本地会话状态。
+- The snapshot record must stay small enough to fit alongside the URL on 800-byte-class tags with headroom for NDEF metadata.  
+  快照记录必须足够短，才能和 URL 一起写进约 800 字节级别的标签，同时给 NDEF 元数据留出余量。
 
 ## Required Manual Configuration / 必须手动完成的配置
 

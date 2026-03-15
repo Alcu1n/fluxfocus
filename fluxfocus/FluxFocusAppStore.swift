@@ -1,6 +1,6 @@
 // [IN]: Foundation, CryptoKit, SwiftData, app models and NFC/App Clip URL rules / Foundation、CryptoKit、SwiftData、应用模型与 NFC/App Clip URL 规则
-// [OUT]: AppStore state orchestration, short invocation URL generation, session and chain mutations / AppStore 状态编排、短 invocation URL 生成、会话与链条变更
-// [POS]: Main domain service for local MVP state and invocation routing / 本地 MVP 状态与 invocation 路由的主领域服务
+// [OUT]: AppStore state orchestration, short invocation URL generation, NFC-driven session mutations, precedent handling, and derived home-chain/tag snapshots / AppStore 状态编排、短 invocation URL 生成、NFC 驱动的会话变更、判例处理与派生首页/标签快照
+// [POS]: Main domain service for local MVP state, invocation routing, NFC-governed lifecycle, and dashboard derivation / 本地 MVP 状态、invocation 路由、NFC 治理生命周期与看板派生的主领域服务
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
 
@@ -13,6 +13,25 @@ struct InvocationRoute: Equatable {
     let publicId: String
     let clipCompleted: Bool
     let clipDurationMinutes: Int?
+}
+
+enum SessionTagTouchDisposition: Equatable {
+    case enterSession
+    case rejectMismatchedTag(expectedTagName: String)
+    case triggerManualExit
+    case completeAwaitingSession
+}
+
+struct SessionLifecyclePlan: Equatable {
+    let targetStatus: FocusSessionStatus
+    let closesSession: Bool
+    let nextMainChainNodeIndex: Int?
+}
+
+struct ManualExitReasonResolution: Equatable {
+    let key: String
+    let text: String
+    let reusesExistingRule: Bool
 }
 
 @MainActor
@@ -163,6 +182,52 @@ final class AppStore {
         sessions.first(where: { $0.status == .running })
     }
 
+    func activeSession(from sessions: [FocusSession]) -> FocusSession? {
+        sessions.first(where: { $0.status.isActive })
+    }
+
+    func sessionTagTouchDisposition(
+        for tag: Tag,
+        sessions: [FocusSession]
+    ) -> SessionTagTouchDisposition {
+        let activeSession = activeSession(from: sessions)
+        return FocusDomainLogic.sessionTagTouchDisposition(
+            SessionTouchContext(
+                scannedTagPublicId: tag.tagPublicId,
+                activeSessionTagPublicId: activeSession?.tagPublicId,
+                activeSessionTagName: activeSession?.tagName,
+                activeSessionStatus: activeSession?.status
+            )
+        )
+    }
+
+    func lifecyclePlan(
+        for status: FocusSessionStatus,
+        currentMainChainCount: Int
+    ) -> SessionLifecyclePlan? {
+        FocusDomainLogic.lifecyclePlan(
+            for: status,
+            currentMainChainCount: currentMainChainCount
+        )
+    }
+
+    func manualExitReasonResolution(
+        _ rawReason: String?,
+        existingRules: [PrecedentRule]
+    ) -> ManualExitReasonResolution? {
+        FocusDomainLogic.manualExitReasonResolution(
+            rawReason,
+            existingRules: existingRules
+                .filter { $0.violationType == .manualExit && $0.decision == .allowForever }
+                .map {
+                    ManualExitRuleDigest(
+                        reasonKey: $0.reasonKey,
+                        reasonText: $0.reasonText
+                    )
+                }
+        )
+    }
+
     func scheduledAppointment(from appointments: [Appointment]) -> Appointment? {
         appointments.sorted { $0.scheduledStartAt < $1.scheduledStartAt }
             .first(where: { $0.status == .scheduled })
@@ -198,13 +263,86 @@ final class AppStore {
         )
     }
 
+    func homeChainSnapshot(
+        sessions: [FocusSession],
+        nodes: [ChainNode],
+        pulseSpan: Int = 12,
+        visibleNodeCount: Int = 6
+    ) -> HomeChainSnapshot {
+        let calendar = Calendar.current
+        let today = Date.now
+        let completedSessions = sessions.filter { $0.status == .completed }
+        let sortedCompletedSessions = completedSessions.sorted { $0.startAt < $1.startAt }
+        let currentChainSessions = currentChainSessions(from: sessions)
+        let currentChainNodeMap = Dictionary(
+            uniqueKeysWithValues: nodes
+                .filter { $0.chainType == .main }
+                .map { ($0.relatedEntityId, $0) }
+        )
+        let recentNodes = Array(currentChainSessions.enumerated().suffix(visibleNodeCount)).map { offset, session in
+            let mappedNode = currentChainNodeMap[session.id.uuidString]
+            let fallbackIndex = offset + 1
+            return HomeChainVisualNode(
+                id: session.id,
+                chainIndex: mappedNode?.nodeIndex ?? fallbackIndex,
+                title: shortChainTitle(from: session.goal),
+                durationSec: session.durationSec,
+                completedAt: session.endAt ?? session.startAt,
+                proofSnippet: String((mappedNode?.proofHash ?? session.id.uuidString.lowercased()).prefix(6))
+            )
+        }
+
+        let completedByDay = Dictionary(grouping: completedSessions) {
+            calendar.startOfDay(for: $0.startAt)
+        }
+        let currentChainDays = Set(currentChainSessions.map { calendar.startOfDay(for: $0.startAt) })
+        let startOfToday = calendar.startOfDay(for: today)
+        let dailyPulses = (0..<pulseSpan).compactMap { offset -> HomeChainDailyPulse? in
+            guard let day = calendar.date(byAdding: .day, value: offset - (pulseSpan - 1), to: startOfToday) else {
+                return nil
+            }
+
+            let daySessions = completedByDay[day] ?? []
+            return HomeChainDailyPulse(
+                dayStart: day,
+                totalFocusSeconds: daySessions.reduce(0) { $0 + $1.durationSec },
+                completedCount: daySessions.count,
+                contributesToCurrentChain: currentChainDays.contains(day)
+            )
+        }
+
+        return HomeChainSnapshot(
+            currentLength: currentChainSessions.count,
+            archivedLength: max(currentChainSessions.count - recentNodes.count, 0),
+            totalCompletedSessions: completedSessions.count,
+            totalFocusSeconds: completedSessions.reduce(0) { $0 + $1.durationSec },
+            focusSecondsToday: completedSessions
+                .filter { calendar.isDate($0.startAt, inSameDayAs: today) }
+                .reduce(0) { $0 + $1.durationSec },
+            todayContributionCount: currentChainSessions.filter {
+                calendar.isDate($0.startAt, inSameDayAs: today)
+            }.count,
+            shieldedSessionCount: completedSessions.filter(\.shieldEnabled).count,
+            latestSummary: currentChainSessions.last?.goal ?? sortedCompletedSessions.last?.goal ?? "下一节链条等待被点亮",
+            latestCompletionAt: currentChainSessions.last?.endAt ?? currentChainSessions.last?.startAt,
+            recentNodes: recentNodes,
+            dailyPulses: dailyPulses
+        )
+    }
+
     func simulateScenePhaseChange(
         from oldPhase: String,
         to newPhase: String,
         sessions: [FocusSession],
+        nfcScanArmed: Bool,
         context: ModelContext
     ) throws {
-        guard let running = runningSession(from: sessions) else {
+        guard let activeSession = activeSession(from: sessions) else {
+            backgroundEnteredAt = nil
+            return
+        }
+
+        guard activeSession.status == .running, nfcScanArmed == false else {
             backgroundEnteredAt = nil
             return
         }
@@ -221,7 +359,7 @@ final class AppStore {
                 try recordViolation(
                     type: .longBackground,
                     payload: "离开前台 \(delta) 秒",
-                    session: running,
+                    session: activeSession,
                     appointment: nil,
                     context: context
                 )
@@ -238,7 +376,7 @@ final class AppStore {
         source: SessionSource,
         appointment: Appointment? = nil
     ) throws {
-        guard runningSession(from: sessions) == nil else { return }
+        guard activeSession(from: sessions) == nil else { return }
 
         try expireOverdueAppointments(context: context, now: .now)
 
@@ -274,17 +412,39 @@ final class AppStore {
         try context.save()
     }
 
-    func completeSession(
+    func markAwaitingNFCCompletion(
+        _ session: FocusSession,
+        context: ModelContext
+    ) throws {
+        guard let plan = lifecyclePlan(for: session.status, currentMainChainCount: 0),
+              plan.targetStatus == .awaitingNFCCompletion else {
+            return
+        }
+
+        session.status = plan.targetStatus
+        try context.save()
+    }
+
+    func completeAwaitingSession(
         _ session: FocusSession,
         sessions: [FocusSession],
         nodes: [ChainNode],
         context: ModelContext
     ) throws {
-        guard session.status == .running else { return }
+        guard let plan = lifecyclePlan(
+            for: session.status,
+            currentMainChainCount: chainLengthForSessions(sessions)
+        ),
+        let nextIndex = plan.nextMainChainNodeIndex,
+        plan.targetStatus == .completed
+        else {
+            return
+        }
 
-        let nextIndex = chainLengthForSessions(sessions) + 1
-        session.status = .completed
-        session.endAt = .now
+        session.status = plan.targetStatus
+        if plan.closesSession {
+            session.endAt = .now
+        }
 
         context.insert(
             ChainNode(
@@ -322,13 +482,13 @@ final class AppStore {
         try context.save()
     }
 
-    func abandonSession(
+    func abandonSessionByNFC(
         _ session: FocusSession,
         context: ModelContext
     ) throws {
         try recordViolation(
             type: .manualExit,
-            payload: "用户主动结束当前会话",
+            payload: "用户通过 NFC 主动退出当前会话",
             session: session,
             appointment: nil,
             context: context
@@ -365,21 +525,56 @@ final class AppStore {
     func applyDecision(
         event: ViolationEvent,
         decision: PrecedentDecision,
+        reasonText: String? = nil,
         sessions: [FocusSession],
         context: ModelContext
     ) throws {
-        let rule = PrecedentRule(
-            violationType: event.type,
-            decision: decision,
-            scope: "mvp-v1",
-            note: decision == .allowForever ? "后续相同类型自动放行" : "本次违规触发断链"
+        let resolution = manualExitReasonResolution(
+            reasonText,
+            existingRules: manualExitRules(context: context)
         )
-        context.insert(rule)
+        let cleanReasonText = resolution?.text ?? cleanedManualExitReason(reasonText)
+        let cleanReasonKey = resolution?.key ?? normalizedManualExitReason(reasonText)
+
+        if decision == .allowForever,
+           event.type == .manualExit,
+           cleanReasonKey.isEmpty {
+            return
+        }
+
+        let rule: PrecedentRule
+
+        if decision == .allowForever,
+           event.type == .manualExit,
+           cleanReasonKey.isEmpty == false,
+           resolution?.reusesExistingRule == true,
+           let existingRule = manualExitRule(reasonKey: cleanReasonKey, context: context) {
+            rule = existingRule
+        } else {
+            let newRule = PrecedentRule(
+                violationType: event.type,
+                decision: decision,
+                scope: event.type == .manualExit ? "manual-exit-v1" : "mvp-v1",
+                reasonKey: event.type == .manualExit ? cleanReasonKey : "",
+                reasonText: event.type == .manualExit ? cleanReasonText : "",
+                note: decision == .allowForever ? "后续同类行为自动放行" : "本次违规触发断链"
+            )
+            context.insert(newRule)
+            rule = newRule
+        }
+
+        let resolvedReasonKey = event.type == .manualExit ? rule.reasonKey : ""
+        let resolvedReasonText = event.type == .manualExit ? rule.reasonText : ""
 
         event.decisionStatus = decision == .reset ? .reset : .allowed
         event.resolvedAt = .now
         event.resolvedRuleId = rule.id
-        event.note = decision.label
+        event.decisionReasonKey = resolvedReasonKey
+        event.decisionReasonText = resolvedReasonText
+        event.note =
+            decision == .allowForever && resolvedReasonText.isEmpty == false
+            ? "永久允许：\(resolvedReasonText)"
+            : decision.label
 
         if decision == .reset,
            let sessionId = event.sessionId,
@@ -387,6 +582,15 @@ final class AppStore {
             session.status = .failed
             session.endAt = .now
             session.failedReason = event.type.label
+        }
+
+        if decision == .allowForever,
+           event.type == .manualExit,
+           let sessionId = event.sessionId,
+           let session = sessions.first(where: { $0.id == sessionId }) {
+            session.status = .allowedExit
+            session.endAt = .now
+            session.failedReason = nil
         }
 
         try context.save()
@@ -451,6 +655,51 @@ final class AppStore {
         try context.save()
     }
 
+    func manualExitRules(context: ModelContext) -> [PrecedentRule] {
+        let descriptor = FetchDescriptor<PrecedentRule>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        let allRules = (try? context.fetch(descriptor)) ?? []
+        var seenKeys = Set<String>()
+
+        return allRules.filter { rule in
+            guard rule.violationType == .manualExit,
+                  rule.decision == .allowForever,
+                  rule.reasonKey.isEmpty == false,
+                  seenKeys.insert(rule.reasonKey).inserted
+            else {
+                return false
+            }
+            return true
+        }
+    }
+
+    func tagSnapshot(context: ModelContext, now: Date = .now) -> NFCTagSnapshot {
+        let sessions = (try? context.fetch(FetchDescriptor<FocusSession>())) ?? []
+        let appointments = fetchAppointments(context: context)
+        let nodes = (try? context.fetch(FetchDescriptor<ChainNode>())) ?? []
+        let activeSession = activeSession(from: sessions)
+        let latestMainProof = latestHash(in: nodes, chainType: .main)
+        let sessionState: NFCTagSnapshot.SessionState
+
+        switch activeSession?.status {
+        case .running:
+            sessionState = .run
+        case .awaitingNFCCompletion:
+            sessionState = .wait
+        default:
+            sessionState = .idle
+        }
+
+        return NFCTagSnapshot(
+            mainChainLength: chainLengthForSessions(sessions),
+            appointmentChainLength: chainLengthForAppointments(appointments),
+            proofSnippet: String(latestMainProof.prefix(12)),
+            sessionState: sessionState,
+            unixTimestamp: Int(now.timeIntervalSince1970),
+            durationMinutes: (activeSession?.durationSec ?? 0) / 60,
+            sessionToken: activeSession?.id.uuidString.lowercased() ?? latestSessionToken(from: sessions)
+        )
+    }
+
     func expireOverdueAppointments(context: ModelContext, now: Date) throws {
         let appointments = fetchAppointments(context: context)
         let rules = try context.fetch(FetchDescriptor<PrecedentRule>())
@@ -479,7 +728,10 @@ final class AppStore {
         context: ModelContext
     ) throws {
         let rules = try context.fetch(FetchDescriptor<PrecedentRule>())
-        let autoAllow = rules.contains(where: { $0.violationType == type && $0.decision == .allowForever })
+        let autoAllow =
+            type == .manualExit
+            ? false
+            : rules.contains(where: { $0.violationType == type && $0.decision == .allowForever })
 
         let recentFetch = FetchDescriptor<ViolationEvent>()
         let recentEvents = try context.fetch(recentFetch)
@@ -523,19 +775,26 @@ final class AppStore {
         return (try? context.fetch(descriptor)) ?? []
     }
 
+    private func currentChainSessions(from sessions: [FocusSession]) -> [FocusSession] {
+        let orderedSessions = sessions.sorted { $0.startAt > $1.startAt }
+        var streak: [FocusSession] = []
+
+        for session in orderedSessions {
+            switch session.status {
+            case .completed:
+                streak.append(session)
+            case .failed:
+                return streak.sorted { $0.startAt < $1.startAt }
+            case .ready, .running, .awaitingNFCCompletion, .allowedExit:
+                continue
+            }
+        }
+
+        return streak.sorted { $0.startAt < $1.startAt }
+    }
+
     private func chainLengthForSessions(_ sessions: [FocusSession]) -> Int {
-        sessions.sorted { $0.startAt > $1.startAt }
-            .reduce(into: (count: 0, stop: false)) { state, session in
-                guard !state.stop else { return }
-                switch session.status {
-                case .completed:
-                    state.count += 1
-                case .failed:
-                    state.stop = true
-                default:
-                    break
-                }
-            }.count
+        currentChainSessions(from: sessions).count
     }
 
     private func chainLengthForAppointments(_ appointments: [Appointment]) -> Int {
@@ -557,6 +816,13 @@ final class AppStore {
         nodes.filter { $0.chainType == chainType }
             .sorted { $0.createdAt > $1.createdAt }
             .first?.proofHash ?? "GENESIS"
+    }
+
+    private func shortChainTitle(from rawValue: String) -> String {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return "未命名专注" }
+        guard trimmed.count > 12 else { return trimmed }
+        return String(trimmed.prefix(12)) + "…"
     }
 
     private func proofHash(previousHash: String, components: [String]) -> String {
@@ -618,5 +884,22 @@ final class AppStore {
             .queryItems?
             .first(where: { $0.name == name })?
             .value
+    }
+
+    private func manualExitRule(reasonKey: String, context: ModelContext) -> PrecedentRule? {
+        manualExitRules(context: context).first(where: { $0.reasonKey == reasonKey })
+    }
+
+    private func normalizedManualExitReason(_ rawValue: String?) -> String {
+        FocusDomainLogic.normalizedManualExitReason(rawValue)
+    }
+
+    private func cleanedManualExitReason(_ rawValue: String?) -> String {
+        FocusDomainLogic.cleanedManualExitReason(rawValue)
+    }
+
+    private func latestSessionToken(from sessions: [FocusSession]) -> String {
+        let latestSession = sessions.sorted { $0.startAt > $1.startAt }.first
+        return String((latestSession?.id.uuidString.lowercased() ?? "none").prefix(8))
     }
 }

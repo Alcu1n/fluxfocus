@@ -1,6 +1,6 @@
 // [IN]: Combine, FamilyControls, ManagedSettings, and persisted ShieldPolicy snapshots / Combine、FamilyControls、ManagedSettings 与持久化 ShieldPolicy 快照
-// [OUT]: Authorization state, picker selection, and live Focus Shield application / 授权状态、选择器状态与实时 Focus Shield 应用
-// [POS]: Bridge from local policy state to Apple Screen Time shielding APIs / 从本地策略状态到 Apple 屏幕使用时间屏蔽 API 的桥接层
+// [OUT]: Authorization state, picker selection, live Focus Shield application, and test-safe fallback behavior / 授权状态、选择器状态、实时 Focus Shield 应用与测试安全回退行为
+// [POS]: Bridge from local policy state to Apple Screen Time shielding APIs without forcing tests through device-only services / 从本地策略状态到 Apple 屏幕使用时间屏蔽 API 的桥接层，并避免测试强行进入仅设备可用服务
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
 
@@ -16,13 +16,22 @@ final class FocusShieldController: ObservableObject {
     @Published var isPickerPresented = false
     @Published var lastErrorMessage: String?
 
-    private let authorizationCenter = AuthorizationCenter.shared
-    private let store = ManagedSettingsStore(named: .init("FocusShield"))
+    private let authorizationCenter: AuthorizationCenter?
+    private let store: ManagedSettingsStore?
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    init() {
-        authorizationStatus = authorizationCenter.authorizationStatus
+    init(testing: Bool = false) {
+        if testing {
+            authorizationCenter = nil
+            store = nil
+            authorizationStatus = .notDetermined
+        } else {
+            let center = AuthorizationCenter.shared
+            authorizationCenter = center
+            store = ManagedSettingsStore(named: .init("FocusShield"))
+            authorizationStatus = center.authorizationStatus
+        }
         activitySelection = FamilyActivitySelection()
     }
 
@@ -57,7 +66,7 @@ final class FocusShieldController: ObservableObject {
     }
 
     func restoreSelection(from policy: ShieldPolicy?) {
-        authorizationStatus = authorizationCenter.authorizationStatus
+        authorizationStatus = authorizationCenter?.authorizationStatus ?? .notDetermined
         guard let data = policy?.activitySelectionData,
               let selection = try? decoder.decode(FamilyActivitySelection.self, from: data) else {
             return
@@ -73,6 +82,12 @@ final class FocusShieldController: ObservableObject {
     }
 
     func requestAuthorizationIfNeeded() async -> Bool {
+        guard let authorizationCenter else {
+            authorizationStatus = .notDetermined
+            lastErrorMessage = nil
+            return false
+        }
+
         authorizationStatus = authorizationCenter.authorizationStatus
         guard authorizationStatus != .approved else { return true }
 
@@ -96,7 +111,7 @@ final class FocusShieldController: ObservableObject {
     }
 
     func applyShield(isEnabled: Bool, isSessionRunning: Bool) {
-        guard isEnabled, isSessionRunning else {
+        guard let store, isEnabled, isSessionRunning else {
             clearShield()
             return
         }
@@ -108,6 +123,6 @@ final class FocusShieldController: ObservableObject {
     }
 
     func clearShield() {
-        store.clearAllSettings()
+        store?.clearAllSettings()
     }
 }

@@ -7,12 +7,21 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		455814195B4216FEB3381ED1 /* FluxFocusAppStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A97B3AE27E92C137448F7C3 /* FluxFocusAppStoreTests.swift */; };
 		877F57538F14235B5B9B6847 /* fluxfocusClip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = A77C561C6D6FA5C3CB6FE63D /* fluxfocusClip.app */; };
+		F165EFF9099A1C402870C505 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 24993E31A3401B8ED420E4D7 /* Foundation.framework */; };
 		F31BCB021FD62561275CB79E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 24993E31A3401B8ED420E4D7 /* Foundation.framework */; };
 		F95DB7752F65ED9500E80673 /* WheelPickerKit in Frameworks */ = {isa = PBXBuildFile; productRef = F95DB7742F65ED9500E80673 /* WheelPickerKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		5052862A0C5AD3ED5D7315F8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F9F6EBFA2F62F93C0049218E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F9F6EC012F62F93C0049218E;
+			remoteInfo = fluxfocus;
+		};
 		59A5EAF92F50471172151433 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = F9F6EBFA2F62F93C0049218E /* Project object */;
@@ -37,7 +46,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0A97B3AE27E92C137448F7C3 /* FluxFocusAppStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FluxFocusAppStoreTests.swift; sourceTree = "<group>"; };
 		24993E31A3401B8ED420E4D7 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		372C42032549E7FFE6970E1C /* fluxfocusTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = fluxfocusTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A77C561C6D6FA5C3CB6FE63D /* fluxfocusClip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = fluxfocusClip.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F9F6EC022F62F93C0049218E /* fluxfocus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = fluxfocus.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -79,6 +90,14 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		324E7DE205F47F8535F3D112 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F165EFF9099A1C402870C505 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5DEE02D72A8145EA5D75A0FF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -114,6 +133,14 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		83DDFA419270B0EB532FB21E /* fluxfocusTests */ = {
+			isa = PBXGroup;
+			children = (
+				0A97B3AE27E92C137448F7C3 /* FluxFocusAppStoreTests.swift */,
+			);
+			path = fluxfocusTests;
+			sourceTree = "<group>";
+		};
 		F9F6EBF92F62F93C0049218E = {
 			isa = PBXGroup;
 			children = (
@@ -121,6 +148,7 @@
 				F9F6EC032F62F93C0049218E /* Products */,
 				4ABAB7097336D53CE7F8A135 /* fluxfocusClip */,
 				4D640C7D5F2F90BD2180CDDA /* Frameworks */,
+				83DDFA419270B0EB532FB21E /* fluxfocusTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -129,6 +157,7 @@
 			children = (
 				F9F6EC022F62F93C0049218E /* fluxfocus.app */,
 				A77C561C6D6FA5C3CB6FE63D /* fluxfocusClip.app */,
+				372C42032549E7FFE6970E1C /* fluxfocusTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -136,6 +165,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		21F73CC9E4564C603070BD25 /* fluxfocusTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0197BE23932BA87F16BAD05 /* Build configuration list for PBXNativeTarget "fluxfocusTests" */;
+			buildPhases = (
+				C0ABAAFC09B5995041418098 /* Sources */,
+				324E7DE205F47F8535F3D112 /* Frameworks */,
+				7BE0F60ED2DA4FF86299DE07 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				930E6EC4656048DD6D10241B /* PBXTargetDependency */,
+			);
+			name = fluxfocusTests;
+			productName = fluxfocusTests;
+			productReference = 372C42032549E7FFE6970E1C /* fluxfocusTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		84A532B971281DA1305FCC63 /* fluxfocusClip */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0103772F7E0D51127BC603F4 /* Build configuration list for PBXNativeTarget "fluxfocusClip" */;
@@ -218,12 +265,20 @@
 			targets = (
 				F9F6EC012F62F93C0049218E /* fluxfocus */,
 				84A532B971281DA1305FCC63 /* fluxfocusClip */,
+				21F73CC9E4564C603070BD25 /* fluxfocusTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		330C2967171490B137CFAE05 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7BE0F60ED2DA4FF86299DE07 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -247,6 +302,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C0ABAAFC09B5995041418098 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				455814195B4216FEB3381ED1 /* FluxFocusAppStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F9F6EBFE2F62F93C0049218E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -263,6 +326,12 @@
 			target = 84A532B971281DA1305FCC63 /* fluxfocusClip */;
 			targetProxy = 59A5EAF92F50471172151433 /* PBXContainerItemProxy */;
 		};
+		930E6EC4656048DD6D10241B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = fluxfocus;
+			target = F9F6EC012F62F93C0049218E /* fluxfocus */;
+			targetProxy = 5052862A0C5AD3ED5D7315F8 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -275,7 +344,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = fluxfocusClip/fluxfocusClip.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = RZD9M68FZ9;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = fluxfocusClip/Info.plist;
@@ -303,6 +372,33 @@
 			};
 			name = Release;
 		};
+		BDE1C51C67553F46E7885FAD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = studio.lrai.fluxfocusTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fluxfocus.app/fluxfocus";
+				TEST_TARGET_NAME = fluxfocus;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		D4D3773FA594FD7B5A776454 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -312,7 +408,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = fluxfocusClip/fluxfocusClip.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = RZD9M68FZ9;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = fluxfocusClip/Info.plist;
@@ -469,7 +565,7 @@
 				CODE_SIGN_ENTITLEMENTS = fluxfocus/fluxfocus.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = RZD9M68FZ9;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -504,7 +600,7 @@
 				CODE_SIGN_ENTITLEMENTS = fluxfocus/fluxfocus.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = RZD9M68FZ9;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -530,6 +626,33 @@
 			};
 			name = Release;
 		};
+		FE2759B1556CAFA50294FC46 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = studio.lrai.fluxfocusTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fluxfocus.app/fluxfocus";
+				TEST_TARGET_NAME = fluxfocus;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -538,6 +661,15 @@
 			buildConfigurations = (
 				6D559DFF95D6EED19D71D4FF /* Release */,
 				D4D3773FA594FD7B5A776454 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0197BE23932BA87F16BAD05 /* Build configuration list for PBXNativeTarget "fluxfocusTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BDE1C51C67553F46E7885FAD /* Release */,
+				FE2759B1556CAFA50294FC46 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

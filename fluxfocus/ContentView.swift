@@ -1,6 +1,6 @@
-// [IN]: SwiftUI, SwiftData queries, AppStore service, NFCManager, FamilyControls, WheelPickerKit, StudioChrome, and local focus models / SwiftUI、SwiftData 查询、AppStore 服务、NFCManager、FamilyControls、WheelPickerKit、StudioChrome 与本地专注模型
-// [OUT]: Unified studio-style tab UI, NFC entry points, invocation routing, minute-level session drafting, and Focus Shield settings / 统一 studio 风格的标签页 UI、NFC 入口、invocation 路由、分钟级会话编排与 Focus Shield 设置
-// [POS]: Primary SwiftUI composition root for the full app experience and shared studio surfaces / 完整应用体验与共享 studio 视觉表面的主要 SwiftUI 组合根
+// [IN]: SwiftUI, UIKit hosting, SwiftData queries, AppStore service, NFCManager, FamilyControls, WheelPickerKit, StudioChrome, and local focus models / SwiftUI、UIKit 宿主、SwiftData 查询、AppStore 服务、NFCManager、FamilyControls、WheelPickerKit、StudioChrome 与本地专注模型
+// [OUT]: Unified studio-style tab UI, chain-first home surfaces, NFC start/end routing, minute-level session drafting, and precedent-aware session controls / 统一 studio 风格的标签页 UI、链条优先首页表面、NFC 开始/结束路由、分钟级会话编排与判例感知会话控制
+// [POS]: Primary SwiftUI composition root for the full app experience, shared studio surfaces, NFC-governed session lifecycle, and the wheel-first session studio / 完整应用体验、共享 studio 视觉表面、NFC 治理会话生命周期与滚轮优先会话控制台的主要 SwiftUI 组合根
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
 
@@ -8,6 +8,7 @@ import FamilyControls
 import ManagedSettings
 import SwiftData
 import SwiftUI
+import UIKit
 import WheelPickerKit
 
 struct ContentView: View {
@@ -19,6 +20,20 @@ struct ContentView: View {
         case settings
     }
 
+    private enum ArmedNFCScanMode {
+        case manualExit
+        case completion
+
+        var prompt: String {
+            switch self {
+            case .manualExit:
+                "将 iPhone 顶部靠近当前专注标签，记录主动退出"
+            case .completion:
+                "将 iPhone 顶部靠近当前专注标签，完成会话并回写快照"
+            }
+        }
+    }
+
     @Environment(AppStore.self) private var appStore
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
@@ -26,19 +41,23 @@ struct ContentView: View {
 
     @StateObject private var nfcManager = NFCManager()
     @Query(sort: \FocusSession.startAt, order: .reverse) private var sessions: [FocusSession]
-    @Query(sort: \Appointment.scheduledStartAt, order: .reverse) private var appointments: [Appointment]
+    @Query(sort: \Appointment.scheduledStartAt, order: .reverse) private var appointments:
+        [Appointment]
     @Query(sort: \ChainNode.createdAt, order: .reverse) private var nodes: [ChainNode]
-    @Query(sort: \ViolationEvent.createdAt, order: .reverse) private var violations: [ViolationEvent]
+    @Query(sort: \ViolationEvent.createdAt, order: .reverse) private var violations:
+        [ViolationEvent]
     @Query(sort: \PrecedentRule.createdAt, order: .reverse) private var rules: [PrecedentRule]
     @Query(sort: \Tag.createdAt, order: .reverse) private var tags: [Tag]
     @Query(sort: \ShieldPolicy.updatedAt, order: .reverse) private var policies: [ShieldPolicy]
-    @Query(sort: \AppConfiguration.updatedAt, order: .reverse) private var configurations: [AppConfiguration]
+    @Query(sort: \AppConfiguration.updatedAt, order: .reverse) private var configurations:
+        [AppConfiguration]
 
     @State private var quickStartDraft = SessionDraft()
     @State private var showInvocationSheet = false
     @State private var previousScenePhaseName = "active"
     @State private var nfcAlert: NFCAlert?
     @State private var selectedTab: RootTab = .home
+    @State private var armedNFCScanMode: ArmedNFCScanMode?
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -49,6 +68,7 @@ struct ContentView: View {
                     nfcManager: nfcManager,
                     sessions: sessions,
                     appointments: appointments,
+                    nodes: nodes,
                     violations: violations,
                     tags: tags,
                     policies: policies,
@@ -68,7 +88,10 @@ struct ContentView: View {
                     appointments: appointments,
                     nodes: nodes,
                     tags: tags,
-                    policies: policies
+                    policies: policies,
+                    isNFCScanArmed: armedNFCScanMode != nil,
+                    prepareNFCExit: { beginArmedSessionScan(.manualExit) },
+                    prepareNFCCompletion: { beginArmedSessionScan(.completion) }
                 )
             }
             .tabItem {
@@ -124,7 +147,11 @@ struct ContentView: View {
         }
         .sheet(isPresented: .constant(pendingViolation != nil)) {
             if let pendingViolation {
-                DecisionSheet(event: pendingViolation, sessions: sessions)
+                DecisionSheet(
+                    event: pendingViolation,
+                    sessions: sessions,
+                    manualExitRules: appStore.manualExitRules(context: modelContext)
+                )
             }
         }
         .task {
@@ -140,6 +167,7 @@ struct ContentView: View {
                 from: oldName,
                 to: newValue.label,
                 sessions: sessions,
+                nfcScanArmed: armedNFCScanMode != nil,
                 context: modelContext
             )
         }
@@ -165,19 +193,23 @@ struct ContentView: View {
     }
 
     private var shieldSyncKey: String {
-        let runningSession = appStore.runningSession(from: sessions)
+        let activeSession = appStore.activeSession(from: sessions)
         let policy = appStore.activeShieldPolicy(from: policies)
         return [
-            runningSession?.id.uuidString ?? "none",
-            runningSession?.shieldEnabled == true ? "session-on" : "session-off",
+            activeSession?.id.uuidString ?? "none",
+            activeSession?.shieldEnabled == true ? "session-on" : "session-off",
             policy?.id.uuidString ?? "policy-none",
             policy?.enabled == true ? "policy-on" : "policy-off",
-            policy?.updatedAt.ISO8601Format() ?? "never"
+            policy?.updatedAt.ISO8601Format() ?? "never",
         ].joined(separator: "|")
     }
 
     private func handleTagTouch() {
-        nfcManager.beginInvocationScan { result in
+        let prompt =
+            appStore.activeSession(from: sessions) == nil
+            ? "将 iPhone 顶部靠近已写入的 FluxFocus NFC 标签"
+            : "将 iPhone 顶部靠近当前专注标签"
+        nfcManager.beginInvocationScan(prompt: prompt) { result in
             switch result {
             case .success(let payload):
                 guard let url = payload.url else {
@@ -196,30 +228,33 @@ struct ContentView: View {
     }
 
     private func syncFocusShield() {
-        let runningSession = appStore.runningSession(from: sessions)
+        let activeSession = appStore.activeSession(from: sessions)
         let policy = appStore.activeShieldPolicy(from: policies)
         focusShieldController.restoreSelection(from: policy)
         focusShieldController.applyShield(
-            isEnabled: policy?.enabled == true && runningSession?.shieldEnabled == true,
-            isSessionRunning: runningSession != nil
+            isEnabled: policy?.enabled == true && activeSession?.shieldEnabled == true,
+            isSessionRunning: activeSession != nil
         )
     }
 
     private func writeCurrentTag() {
         guard let activeTag = appStore.activeTag(from: tags),
-              let configuration = appStore.activeConfiguration(from: configurations),
-              let url = appStore.invocationURL(for: activeTag, configuration: configuration) else {
+            let configuration = appStore.activeConfiguration(from: configurations),
+            let url = appStore.invocationURL(for: activeTag, configuration: configuration)
+        else {
             nfcAlert = NFCAlert(title: "无法写入", message: "请先在设置页配置 invocation host，并确认已有当前标签。")
             return
         }
 
-        nfcManager.beginWrite(url: url) { result in
+        nfcManager.beginWrite(url: url, snapshot: appStore.tagSnapshot(context: modelContext)) { result in
             switch result {
             case .success(let payload):
-                try? appStore.bindPhysicalTag(activeTag, uidHex: payload.uidHex, context: modelContext)
+                try? appStore.bindPhysicalTag(
+                    activeTag, uidHex: payload.uidHex, context: modelContext)
+                let snapshotLines = payload.snapshot?.summaryLines.joined(separator: "\n") ?? "无快照"
                 nfcAlert = NFCAlert(
                     title: "写入成功",
-                    message: "已将以下 URL 写入 NFC 标签：\n\(url.absoluteString)"
+                    message: "已将以下记录写入 NFC 标签：\n\(url.absoluteString)\n\(snapshotLines)"
                 )
             case .failure(let error):
                 nfcAlert = NFCAlert(title: "写入失败", message: error.localizedDescription)
@@ -232,9 +267,10 @@ struct ContentView: View {
             switch result {
             case .success(let payload):
                 let details = payload.rawRecords.joined(separator: "\n")
+                let snapshot = payload.snapshot?.summaryLines.joined(separator: "\n") ?? "未解析到快照"
                 nfcAlert = NFCAlert(
                     title: "标签内容",
-                    message: "UID: \(payload.uidHex)\n\(details)"
+                    message: "UID: \(payload.uidHex)\n\(details)\n\(snapshot)"
                 )
             case .failure(let error):
                 nfcAlert = NFCAlert(title: "读取失败", message: error.localizedDescription)
@@ -243,13 +279,133 @@ struct ContentView: View {
     }
 
     private func handleInvocationURL(_ url: URL, physicalUID: String? = nil) {
-        guard let route = appStore.parseInvocationRoute(url),
-              let tag = appStore.tag(for: route.publicId, tags: tags) else {
+        guard let (_, tag) = resolveInvocationTarget(url, physicalUID: physicalUID)
+        else {
             nfcAlert = NFCAlert(
                 title: "标签无效",
                 message: "读取到了 NFC 内容，但不是当前 App 可识别的 FluxFocus invocation URL。"
             )
             return
+        }
+
+        selectedTab = .session
+
+        switch appStore.sessionTagTouchDisposition(for: tag, sessions: sessions) {
+        case .enterSession:
+            return
+        case .rejectMismatchedTag(let expectedTagName):
+            nfcAlert = NFCAlert(
+                title: "标签不匹配",
+                message: "当前会话绑定的是 \(expectedTagName)，请使用同一张 NFC 标签结束。"
+            )
+            return
+        case .triggerManualExit:
+            guard let activeSession = appStore.activeSession(from: sessions) else { return }
+            try? appStore.abandonSessionByNFC(activeSession, context: modelContext)
+        case .completeAwaitingSession:
+            guard let activeSession = appStore.activeSession(from: sessions) else { return }
+            try? appStore.completeAwaitingSession(
+                activeSession,
+                sessions: sessions,
+                nodes: nodes,
+                context: modelContext
+            )
+        }
+    }
+
+    private func beginArmedSessionScan(_ mode: ArmedNFCScanMode) {
+        armedNFCScanMode = mode
+
+        if mode == .manualExit {
+            nfcManager.beginInvocationScan(prompt: mode.prompt) { result in
+                armedNFCScanMode = nil
+                switch result {
+                case .success(let payload):
+                    guard let url = payload.url else {
+                        nfcAlert = NFCAlert(
+                            title: "标签无效",
+                            message: "读取到了 NFC 内容，但不是当前 App 可识别的 FluxFocus invocation URL。"
+                        )
+                        return
+                    }
+                    handleInvocationURL(url, physicalUID: payload.uidHex)
+                case .failure(let error):
+                    nfcAlert = NFCAlert(title: "NFC 读取失败", message: error.localizedDescription)
+                }
+            }
+            return
+        }
+
+        nfcManager.beginInvocationScan(
+            prompt: mode.prompt,
+            rewriteHandler: { payload in
+                guard let url = payload.url,
+                    let (_, tag) = resolveInvocationTarget(url, physicalUID: payload.uidHex)
+                else {
+                    nfcAlert = NFCAlert(
+                        title: "标签无效",
+                        message: "读取到了 NFC 内容，但不是当前 App 可识别的 FluxFocus invocation URL。"
+                    )
+                    return nil
+                }
+
+                guard let activeSession = appStore.activeSession(from: sessions) else {
+                    nfcAlert = NFCAlert(title: "没有进行中的会话", message: "当前没有需要通过 NFC 完结的会话。")
+                    return nil
+                }
+
+                if case .rejectMismatchedTag(let expectedTagName) = appStore.sessionTagTouchDisposition(for: tag, sessions: sessions) {
+                    nfcAlert = NFCAlert(
+                        title: "标签不匹配",
+                        message: "当前会话绑定的是 \(expectedTagName)，请使用同一张 NFC 标签完结。"
+                    )
+                    return nil
+                }
+
+                guard activeSession.status == .awaitingNFCCompletion else {
+                    nfcAlert = NFCAlert(
+                        title: "尚未到可完结状态",
+                        message: "会话还在进行中。若要提前结束，请使用“准备 NFC 退出”。"
+                    )
+                    return nil
+                }
+
+                try? appStore.completeAwaitingSession(
+                    activeSession,
+                    sessions: sessions,
+                    nodes: nodes,
+                    context: modelContext
+                )
+                return NFCNDEFWriteRequest(
+                    url: url,
+                    snapshot: appStore.tagSnapshot(context: modelContext),
+                    successMessage: "会话已完结，标签快照已更新"
+                )
+            }
+        ) { result in
+            armedNFCScanMode = nil
+            switch result {
+            case .success(let payload):
+                if let warning = payload.writeWarning {
+                    nfcAlert = NFCAlert(
+                        title: "会话已完成，但快照未回写",
+                        message: warning
+                    )
+                }
+            case .failure(let error):
+                nfcAlert = NFCAlert(title: "NFC 读取失败", message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func resolveInvocationTarget(
+        _ url: URL,
+        physicalUID: String?
+    ) -> (InvocationRoute, Tag)? {
+        guard let route = appStore.parseInvocationRoute(url),
+            let tag = appStore.tag(for: route.publicId, tags: tags)
+        else {
+            return nil
         }
 
         if let clipDurationMinutes = route.clipDurationMinutes {
@@ -263,12 +419,7 @@ struct ContentView: View {
             try? appStore.activateTag(tag, tags: tags, context: modelContext)
         }
 
-        if appStore.runningSession(from: sessions) != nil {
-            selectedTab = .session
-            return
-        }
-
-        selectedTab = .session
+        return (route, tag)
     }
 }
 
@@ -278,8 +429,8 @@ private struct NFCAlert: Identifiable {
     let message: String
 }
 
-private extension ScenePhase {
-    var label: String {
+extension ScenePhase {
+    fileprivate var label: String {
         switch self {
         case .active: "active"
         case .background: "background"
@@ -298,6 +449,7 @@ private struct HomeView: View {
 
     let sessions: [FocusSession]
     let appointments: [Appointment]
+    let nodes: [ChainNode]
     let violations: [ViolationEvent]
     let tags: [Tag]
     let policies: [ShieldPolicy]
@@ -309,6 +461,10 @@ private struct HomeView: View {
             sessions: sessions,
             appointments: appointments,
             violations: violations
+        )
+        let chainSnapshot = appStore.homeChainSnapshot(
+            sessions: sessions,
+            nodes: nodes
         )
         let tag = appStore.activeTag(from: tags)
         let policy = appStore.activeShieldPolicy(from: policies)
@@ -325,6 +481,7 @@ private struct HomeView: View {
                         policy: policy,
                         configuration: configuration
                     )
+                    HomeChainShowcase(snapshot: chainSnapshot)
                     metricsGrid(metrics: metrics)
                     reviewCard(metrics: metrics)
                 }
@@ -395,7 +552,8 @@ private struct HomeView: View {
 
     private func metricsGrid(metrics: DashboardMetrics) -> some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            MetricCard(title: "今日专注", value: metrics.focusSecondsToday.clockString, subtitle: "累计时长")
+            MetricCard(
+                title: "今日专注", value: metrics.focusSecondsToday.clockString, subtitle: "累计时长")
             MetricCard(title: "本周完成", value: "\(metrics.completedThisWeek)", subtitle: "完成会话")
             MetricCard(title: "预约链", value: "\(metrics.appointmentChainLength)", subtitle: "连续履约")
             MetricCard(title: "屏蔽拦截", value: "\(metrics.shieldBlocks)", subtitle: "阻止诱惑应用")
@@ -409,7 +567,9 @@ private struct HomeView: View {
                 HStack {
                     StudioSectionLabel(title: "Review")
                     Spacer()
-                    StudioCapsuleLabel(title: "断链 \(metrics.breakCount)", tone: metrics.breakCount == 0 ? .neutral : .danger)
+                    StudioCapsuleLabel(
+                        title: "断链 \(metrics.breakCount)",
+                        tone: metrics.breakCount == 0 ? .neutral : .danger)
                 }
 
                 if let latestFailure {
@@ -482,8 +642,10 @@ private struct InvocationSheet: View {
                                     .foregroundStyle(StudioTheme.textSecondary)
                                 HStack(spacing: 10) {
                                     StudioCapsuleLabel(title: "主链 \(metrics.mainChainLength)")
-                                    StudioCapsuleLabel(title: "预约链 \(metrics.appointmentChainLength)")
-                                    StudioCapsuleLabel(title: activeTag?.name ?? "未绑定标签", tone: .accent)
+                                    StudioCapsuleLabel(
+                                        title: "预约链 \(metrics.appointmentChainLength)")
+                                    StudioCapsuleLabel(
+                                        title: activeTag?.name ?? "未绑定标签", tone: .accent)
                                 }
                             }
                         }
@@ -554,6 +716,7 @@ private struct InvocationSheet: View {
 private struct SessionView: View {
     @Environment(AppStore.self) private var appStore
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var focusShieldController: FocusShieldController
 
     @Binding var draft: SessionDraft
 
@@ -562,6 +725,9 @@ private struct SessionView: View {
     let nodes: [ChainNode]
     let tags: [Tag]
     let policies: [ShieldPolicy]
+    let isNFCScanArmed: Bool
+    let prepareNFCExit: () -> Void
+    let prepareNFCCompletion: () -> Void
 
     var body: some View {
         ZStack {
@@ -569,8 +735,6 @@ private struct SessionView: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 22) {
-                    sessionHeader
-
                     if let activeSession {
                         runningStudio(activeSession)
                     } else {
@@ -588,13 +752,27 @@ private struct SessionView: View {
                 .padding(.bottom, 36)
             }
         }
-        .navigationTitle("会话")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .studioNavigationBar()
+        .sheet(isPresented: $focusShieldController.isPickerPresented) {
+            FocusShieldSelectionSheet(
+                selection: $focusShieldController.activitySelection
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(.clear)
+        }
+        .task(id: activeShieldPolicy?.updatedAt) {
+            focusShieldController.restoreSelection(from: activeShieldPolicy)
+        }
+        .onChange(of: focusShieldController.activitySelection) { _, _ in
+            persistShieldSelection()
+        }
     }
 
     private var activeSession: FocusSession? {
-        appStore.runningSession(from: sessions)
+        appStore.activeSession(from: sessions)
     }
 
     private var pendingAppointment: Appointment? {
@@ -605,36 +783,17 @@ private struct SessionView: View {
         appStore.activeShieldPolicy(from: policies)
     }
 
-    private var sessionHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            StudioSectionLabel(title: activeSession == nil ? "Focus Session" : "Session In Motion")
-
-            Text(activeSession?.goal ?? "把时长拨准，再安静地开始。")
-                .font(.system(size: 34, weight: .bold, design: .rounded))
-                .foregroundStyle(StudioTheme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(activeSession == nil ? "新的时间轮负责主节奏，下面只保留真正影响专注质量的设置。" : "当前会话正在运行。完成、标记不合格或主动退出，都在这里处理。")
-                .font(.system(size: 15, weight: .medium, design: .rounded))
-                .foregroundStyle(StudioTheme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 8)
-    }
-
     private var draftStudio: some View {
-        VStack(spacing: 18) {
-            StudioCard {
-                VStack(spacing: 22) {
-                    VStack(spacing: 8) {
-                        StudioSectionLabel(title: "Duration")
+        VStack(spacing: 16) {
+            StudioCard(emphasis: true) {
+                VStack(alignment: .leading, spacing: 18) {
+                    StudioSectionLabel(title: "Duration")
 
-                        Text("\(draft.durationMinutes) 分钟")
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.92))
-                            .monospacedDigit()
-                    }
+                    TextField("这段专注要产出什么？", text: $draft.goal)
+                        .textInputAutocapitalization(.never)
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .foregroundStyle(StudioTheme.textPrimary)
+                        .studioTextEntry()
 
                     TimerWheelPicker(
                         selection: $draft.durationMinutes,
@@ -644,80 +803,94 @@ private struct SessionView: View {
                     )
                     .frame(maxWidth: .infinity)
 
-                    Text("\(draft.durationMinutes) min")
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
-                        .foregroundStyle(StudioTheme.textPrimary)
-                        .padding(.horizontal, 26)
-                        .padding(.vertical, 14)
-                        .background(.white.opacity(0.1), in: Capsule())
-                        .overlay {
-                            Capsule()
-                                .stroke(.white.opacity(0.08), lineWidth: 1)
+                    HStack(alignment: .center, spacing: 12) {
+                        Text("\(draft.durationMinutes) min")
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundStyle(StudioTheme.textPrimary)
+                            .padding(.horizontal, 22)
+                            .padding(.vertical, 14)
+                            .background(.white.opacity(0.1), in: Capsule())
+                            .overlay {
+                                Capsule()
+                                    .stroke(.white.opacity(0.08), lineWidth: 1)
+                            }
+
+                        SessionInlineButton(
+                            title: "立即开始",
+                            tone: .primary,
+                            action: startQuickSession
+                        )
+                    }
+
+                    compactShieldComposer
+                }
+            }
+
+            SessionInlineButton(
+                title: "预约 15 分钟后",
+                tone: .secondary,
+                action: scheduleAppointment
+            )
+        }
+    }
+
+    private var compactShieldComposer: some View {
+        StudioInsetPanel {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        StudioSectionLabel(title: "Focus Shield")
+                        if activeShieldPolicy?.enabled == false {
+                            Text("设置中的总开关当前关闭")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundStyle(StudioTheme.textTertiary)
                         }
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: $draft.shieldEnabled)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(StudioTheme.accent)
                 }
-            }
 
-            StudioCard {
-                VStack(alignment: .leading, spacing: 16) {
-                    StudioSectionLabel(title: "目标")
-
-                    TextField("这段专注要产出什么？", text: $draft.goal)
-                        .textInputAutocapitalization(.never)
-                        .studioTextEntry()
-
-                    shieldComposer
+                if draft.shieldEnabled {
+                    ShieldSelectionRail(
+                        applicationTokens: focusShieldController.selectedApplicationTokens,
+                        summaryItems: shieldSupplementSummary,
+                        fallbackText: shieldFallbackText,
+                        addAction: openShieldSelection
+                    )
                 }
-            }
-
-            HStack(spacing: 14) {
-                StudioActionButton(
-                    title: "立即开始",
-                    subtitle: "主链会话",
-                    tone: .primary,
-                    action: startQuickSession
-                )
-
-                StudioActionButton(
-                    title: "预约 15 分钟后",
-                    subtitle: "保留开始窗口",
-                    tone: .secondary,
-                    action: scheduleAppointment
-                )
             }
         }
     }
 
-    private var shieldComposer: some View {
-        StudioInsetPanel {
-            HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    StudioSectionLabel(title: "Focus Shield")
-                    Text(draft.shieldEnabled ? "会话启动时应用系统屏蔽" : "这次会话不应用系统屏蔽")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(StudioTheme.textSecondary)
-                }
+    private var shieldSupplementSummary: [String] {
+        var segments: [String] = []
 
-                Spacer()
-
-                Toggle("", isOn: $draft.shieldEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .tint(StudioTheme.accent)
-            }
-
-            if draft.shieldEnabled {
-                if let activeShieldPolicy, activeShieldPolicy.selectedApps.isEmpty == false {
-                    SessionChipRow(values: Array(activeShieldPolicy.selectedApps.prefix(4)))
-                    Text(activeShieldPolicy.selectedApps.count > 4 ? "已选 \(activeShieldPolicy.selectedApps.count) 项，完整列表在设置页维护。" : "已连接设置页中的真实屏蔽策略。")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(StudioTheme.textTertiary)
-                } else {
-                    Text("还没有可用的屏蔽目标。请先去设置页选择要拦截的 App 与网站。")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(StudioTheme.textTertiary)
-                }
-            }
+        if focusShieldController.selectedCategoryTokens.isEmpty == false {
+            segments.append("分类 \(focusShieldController.selectedCategoryTokens.count)")
         }
+        if focusShieldController.selectedWebDomainTokens.isEmpty == false {
+            segments.append("网站 \(focusShieldController.selectedWebDomainTokens.count)")
+        }
+        if focusShieldController.selectedApplicationTokens.isEmpty,
+            let activeShieldPolicy,
+            activeShieldPolicy.selectedApps.isEmpty == false
+        {
+            segments.append(contentsOf: activeShieldPolicy.selectedApps)
+        }
+
+        return segments
+    }
+
+    private var shieldFallbackText: String {
+        if activeShieldPolicy?.enabled == false {
+            return "已关闭总开关，当前只维护屏蔽目标。"
+        }
+        return "添加要在专注时屏蔽的 App、分类或网站。"
     }
 
     private func runningStudio(_ activeSession: FocusSession) -> some View {
@@ -725,32 +898,54 @@ private struct SessionView: View {
             VStack(alignment: .leading, spacing: 22) {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     let elapsed = max(0, Int(context.date.timeIntervalSince(activeSession.startAt)))
-                    let remaining = max(0, activeSession.durationSec - Int(context.date.timeIntervalSince(activeSession.startAt)))
-                    let progress = activeSession.durationSec == 0 ? 0 : Double(remaining) / Double(activeSession.durationSec)
-                    let endAt = activeSession.startAt.addingTimeInterval(TimeInterval(activeSession.durationSec))
+                    let remaining = max(
+                        0,
+                        activeSession.durationSec
+                            - Int(context.date.timeIntervalSince(activeSession.startAt)))
+                    let progress =
+                        activeSession.durationSec == 0
+                        ? 0 : Double(remaining) / Double(activeSession.durationSec)
+                    let endAt = activeSession.startAt.addingTimeInterval(
+                        TimeInterval(activeSession.durationSec))
 
                     VStack(alignment: .leading, spacing: 20) {
                         HStack(alignment: .top) {
                             StudioCapsuleLabel(title: activeSession.source.label)
                             StudioCapsuleLabel(title: activeSession.tagName)
+                            if activeSession.status == .awaitingNFCCompletion {
+                                StudioCapsuleLabel(title: "等待 NFC 完结", tone: .accent)
+                            }
                             if activeSession.shieldEnabled {
                                 StudioCapsuleLabel(title: "Shield On", tone: .accent)
                             }
                             Spacer()
-                            StudioCapsuleLabel(title: "\(elapsed / 60) / \(activeSession.durationSec / 60) min")
+                            StudioCapsuleLabel(
+                                title: "\(elapsed / 60) / \(activeSession.durationSec / 60) min")
                         }
 
                         StudioCountdownRing(
                             progress: progress,
                             remainingText: remaining.clockString,
-                            detail: "开始于 \(activeSession.startAt.formatted(date: .omitted, time: .shortened)) · 预计结束 \(endAt.formatted(date: .omitted, time: .shortened))"
+                            detail:
+                                activeSession.status == .awaitingNFCCompletion
+                                ? "时长已到，Shield 仍然生效。请再次扫描同一张 NFC 标签完结。"
+                                : "开始于 \(activeSession.startAt.formatted(date: .omitted, time: .shortened)) · 预计结束 \(endAt.formatted(date: .omitted, time: .shortened))"
                         )
 
                         StudioInsetPanel {
                             sessionRuntimeLine(title: "当前目标", value: activeSession.goal)
-                            sessionRuntimeLine(title: "会话时长", value: "\(activeSession.durationSec / 60) 分钟")
+                            sessionRuntimeLine(
+                                title: "会话时长", value: "\(activeSession.durationSec / 60) 分钟")
                             sessionRuntimeLine(title: "来源", value: activeSession.source.label)
+                            sessionRuntimeLine(title: "状态", value: activeSession.status.displayLabel)
                         }
+                    }
+                    .onChange(of: remaining) { _, newValue in
+                        guard newValue == 0, activeSession.status == .running else { return }
+                        try? appStore.markAwaitingNFCCompletion(
+                            activeSession,
+                            context: modelContext
+                        )
                     }
                 }
 
@@ -759,35 +954,32 @@ private struct SessionView: View {
                 }
 
                 VStack(spacing: 12) {
-                    StudioActionButton(
-                        title: "完成会话",
-                        subtitle: "提交主链节点",
-                        tone: .primary
-                    ) {
-                        try? appStore.completeSession(
-                            activeSession,
-                            sessions: sessions,
-                            nodes: nodes,
-                            context: modelContext
-                        )
-                    }
-
-                    HStack(spacing: 12) {
+                    if activeSession.status == .running {
                         StudioActionButton(
-                            title: "标记不合格",
-                            subtitle: "记录质量失败",
-                            tone: .secondary
-                        ) {
-                            try? appStore.recordQualityFailure(activeSession, context: modelContext)
-                        }
-
-                        StudioActionButton(
-                            title: "退出",
-                            subtitle: "终止当前会话",
+                            title: isNFCScanArmed ? "等待 NFC 扫描" : "准备 NFC 退出",
+                            subtitle: "扫描同一张标签后进入“下必为例”",
                             tone: .danger
                         ) {
-                            try? appStore.abandonSession(activeSession, context: modelContext)
+                            prepareNFCExit()
                         }
+                        .disabled(isNFCScanArmed)
+                    } else if activeSession.status == .awaitingNFCCompletion {
+                        StudioActionButton(
+                            title: isNFCScanArmed ? "等待 NFC 扫描" : "准备 NFC 完结",
+                            subtitle: "扫描同一张标签后提交主链节点",
+                            tone: .primary
+                        ) {
+                            prepareNFCCompletion()
+                        }
+                        .disabled(isNFCScanArmed)
+                    }
+
+                    StudioActionButton(
+                        title: "标记不合格",
+                        subtitle: "记录质量失败",
+                        tone: .secondary
+                    ) {
+                        try? appStore.recordQualityFailure(activeSession, context: modelContext)
                     }
                 }
             }
@@ -856,9 +1048,11 @@ private struct SessionView: View {
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundStyle(StudioTheme.textPrimary)
 
-                Text("开始于 \(appointment.scheduledStartAt.formatted(date: .omitted, time: .shortened))，窗口截止 \(appointment.windowEndAt.formatted(date: .omitted, time: .shortened))")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(StudioTheme.textSecondary)
+                Text(
+                    "开始于 \(appointment.scheduledStartAt.formatted(date: .omitted, time: .shortened))，窗口截止 \(appointment.windowEndAt.formatted(date: .omitted, time: .shortened))"
+                )
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(StudioTheme.textSecondary)
 
                 StudioActionButton(
                     title: "履约并开始",
@@ -933,18 +1127,332 @@ private struct SessionView: View {
             appointment: appointment
         )
     }
+
+    private func openShieldSelection() {
+        Task {
+            _ = await focusShieldController.beginSelectionFlow()
+        }
+    }
+
+    private func persistShieldSelection() {
+        guard let activeShieldPolicy else { return }
+        try? appStore.updateShieldActivitySelection(
+            policy: activeShieldPolicy,
+            encodedSelection: focusShieldController.persistableSelectionData(),
+            summary: focusShieldController.selectionSummary,
+            context: modelContext
+        )
+    }
 }
 
-private struct SessionChipRow: View {
-    let values: [String]
+private struct SessionInlineButton: View {
+    let title: String
+    let tone: StudioButtonTone
+    let action: () -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(values, id: \.self) { value in
-                    StudioCapsuleLabel(title: value)
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+                .background(background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(foreground)
+    }
+
+    private var background: Color {
+        switch tone {
+        case .primary:
+            StudioTheme.accent
+        case .secondary:
+            Color.white.opacity(0.08)
+        case .danger:
+            StudioTheme.danger
+        }
+    }
+
+    private var foreground: Color {
+        switch tone {
+        case .primary:
+            StudioTheme.deepInk
+        case .secondary, .danger:
+            .white
+        }
+    }
+
+    private var borderColor: Color {
+        switch tone {
+        case .primary:
+            .clear
+        case .secondary, .danger:
+            Color.white.opacity(0.08)
+        }
+    }
+}
+
+private struct ShieldSelectionRail: View {
+    let applicationTokens: [ApplicationToken]
+    let summaryItems: [String]
+    let fallbackText: String
+    let addAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Group {
+                if applicationTokens.isEmpty == false || summaryItems.isEmpty == false {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            if applicationTokens.isEmpty == false {
+                                HStack(spacing: 1) {
+                                    ForEach(applicationTokens, id: \.self) { token in
+                                        ShieldAppAvatar(token: token)
+                                    }
+                                }
+                                .padding(.trailing, 8)
+                            }
+
+                            ForEach(summaryItems, id: \.self) { item in
+                                StudioTokenChip {
+                                    Text(item)
+                                        .font(
+                                            .system(size: 12, weight: .semibold, design: .rounded)
+                                        )
+                                        .foregroundStyle(.white.opacity(0.82))
+                                }
+                            }
+                        }
+                        .padding(.trailing, 26)
+                    }
+                    .mask {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0),
+                                .init(color: .black, location: 0.85),
+                                .init(color: .clear, location: 1),
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    }
+                } else {
+                    Text(fallbackText)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(StudioTheme.textSecondary)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+
+            Button(action: addAction) {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Color.white.opacity(0.08), in: Circle())
+                    .overlay {
+                        Circle()
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("添加屏蔽目标")
+        }
+    }
+}
+
+private struct ShieldAppAvatar: View {
+    let token: ApplicationToken
+
+    var body: some View {
+        Label(token)
+            .labelStyle(.iconOnly)
+            .frame(width: 36, height: 36)
+            .background(Color.white.opacity(0.08), in: Circle())
+            .overlay {
+                Circle()
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(Circle())
+    }
+}
+
+private struct FocusShieldSelectionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @Binding var selection: FamilyActivitySelection
+
+    private var selectedApplicationTokens: [ApplicationToken] {
+        Array(selection.applicationTokens)
+    }
+
+    private var supplementalSummaryItems: [String] {
+        var items: [String] = []
+        if selection.categoryTokens.isEmpty == false {
+            items.append("分类 \(selection.categoryTokens.count)")
+        }
+        if selection.webDomainTokens.isEmpty == false {
+            items.append("网站 \(selection.webDomainTokens.count)")
+        }
+        return items
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                StudioBackground()
+
+                VStack(spacing: 18) {
+                    StudioCard(emphasis: true) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            HStack(alignment: .top, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    StudioSectionLabel(title: "Focus Shield")
+                                    Text("选择要在专注期间屏蔽的内容")
+                                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                                        .foregroundStyle(StudioTheme.textPrimary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Text("外层保持 FluxFocus 的 studio 视觉，真正的 App、分类和网站选择仍然由系统控件负责。")
+                                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                                        .foregroundStyle(StudioTheme.textSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+
+                                Spacer()
+
+                                Button {
+                                    dismiss()
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 36, height: 36)
+                                        .background(Color.white.opacity(0.08), in: Circle())
+                                        .overlay {
+                                            Circle()
+                                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                        }
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("关闭屏蔽选择")
+                            }
+
+                            if selectedApplicationTokens.isEmpty == false
+                                || supplementalSummaryItems.isEmpty == false
+                            {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 10) {
+                                        if selectedApplicationTokens.isEmpty == false {
+                                            HStack(spacing: 1) {
+                                                ForEach(selectedApplicationTokens, id: \.self) {
+                                                    token in
+                                                    ShieldAppAvatar(token: token)
+                                                }
+                                            }
+                                            .padding(.trailing, 6)
+                                        }
+
+                                        ForEach(supplementalSummaryItems, id: \.self) { item in
+                                            StudioTokenChip {
+                                                Text(item)
+                                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                                    .foregroundStyle(.white.opacity(0.82))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    StudioCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            StudioSectionLabel(title: "Choose Activities")
+
+                            RoundedFamilyActivityPickerHost(selection: $selection)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+            .toolbarVisibility(.hidden, for: .navigationBar)
+        }
+    }
+}
+
+private struct RoundedFamilyActivityPickerHost: UIViewControllerRepresentable {
+    @Binding var selection: FamilyActivitySelection
+
+    func makeUIViewController(context: Context) -> PickerHostingViewController {
+        PickerHostingViewController(rootView: AnyView(FamilyActivityPicker(selection: $selection)))
+    }
+
+    func updateUIViewController(
+        _ uiViewController: PickerHostingViewController,
+        context: Context
+    ) {
+        uiViewController.update(rootView: AnyView(FamilyActivityPicker(selection: $selection)))
+    }
+
+    final class PickerHostingViewController: UIViewController {
+        private let hostingController = UIHostingController(rootView: AnyView(EmptyView()))
+
+        init(rootView: AnyView) {
+            super.init(nibName: nil, bundle: nil)
+            hostingController.rootView = rootView
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+
+            addChild(hostingController)
+            hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(hostingController.view)
+            NSLayoutConstraint.activate([
+                hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                hostingController.view.topAnchor.constraint(equalTo: view.topAnchor),
+                hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            ])
+            hostingController.didMove(toParent: self)
+
+            applyRoundedStyle()
+        }
+
+        func update(rootView: AnyView) {
+            hostingController.rootView = rootView
+            applyRoundedStyle()
+        }
+
+        private func applyRoundedStyle() {
+            view.backgroundColor = UIColor.black.withAlphaComponent(0.26)
+            view.layer.cornerRadius = 30
+            view.layer.cornerCurve = .continuous
+            view.layer.masksToBounds = true
+
+            hostingController.view.backgroundColor = .clear
+            hostingController.view.layer.cornerRadius = 30
+            hostingController.view.layer.cornerCurve = .continuous
+            hostingController.view.layer.masksToBounds = true
         }
     }
 }
@@ -987,7 +1495,8 @@ private struct ChainsView: View {
                                 StudioCapsuleLabel(title: "预约 \(appointmentNodes.count)")
                                 StudioCapsuleLabel(
                                     title: "失败 \(failedSessions.count + missedAppointments.count)",
-                                    tone: failedSessions.isEmpty && missedAppointments.isEmpty ? .neutral : .danger
+                                    tone: failedSessions.isEmpty && missedAppointments.isEmpty
+                                        ? .neutral : .danger
                                 )
                             }
                         }
@@ -1016,7 +1525,8 @@ private struct ChainsView: View {
                                 Spacer()
                                 StudioCapsuleLabel(
                                     title: "\(failedSessions.count + missedAppointments.count)",
-                                    tone: failedSessions.isEmpty && missedAppointments.isEmpty ? .neutral : .danger
+                                    tone: failedSessions.isEmpty && missedAppointments.isEmpty
+                                        ? .neutral : .danger
                                 )
                             }
 
@@ -1268,7 +1778,8 @@ private struct SettingsView: View {
                                     StudioCapsuleLabel(title: "当前", tone: .accent)
                                 } else {
                                     Button("设为当前") {
-                                        try? appStore.activateTag(tag, tags: tags, context: modelContext)
+                                        try? appStore.activateTag(
+                                            tag, tags: tags, context: modelContext)
                                     }
                                     .font(.system(size: 13, weight: .bold, design: .rounded))
                                     .foregroundStyle(.white)
@@ -1282,7 +1793,10 @@ private struct SettingsView: View {
                                 }
                             }
                             .padding(16)
-                            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .background(
+                                .white.opacity(0.05),
+                                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            )
                             .overlay {
                                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                                     .stroke(.white.opacity(0.08), lineWidth: 1)
@@ -1314,16 +1828,23 @@ private struct SettingsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 StudioSectionLabel(title: "NFC 写码")
 
-                TextField("Invocation Host", text: Binding(
-                    get: { configuration.invocationHost },
-                    set: { try? appStore.updateInvocationHost(configuration, host: $0, context: modelContext) }
-                ))
+                TextField(
+                    "Invocation Host",
+                    text: Binding(
+                        get: { configuration.invocationHost },
+                        set: {
+                            try? appStore.updateInvocationHost(
+                                configuration, host: $0, context: modelContext)
+                        }
+                    )
+                )
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .studioTextEntry()
 
                 if let activeTag,
-                   let url = appStore.invocationURL(for: activeTag, configuration: configuration) {
+                    let url = appStore.invocationURL(for: activeTag, configuration: configuration)
+                {
                     settingsInfoBlock(title: "当前写入 URL", value: url.absoluteString)
                 }
 
@@ -1354,15 +1875,18 @@ private struct SettingsView: View {
                 StudioSectionLabel(title: "App Clip 调试")
 
                 if let experienceURL = appStore.appClipExperienceURL(for: configuration) {
-                    settingsInfoBlock(title: "Connect Experience URL", value: experienceURL.absoluteString)
+                    settingsInfoBlock(
+                        title: "Connect Experience URL", value: experienceURL.absoluteString)
                 }
 
                 if let activeTag,
-                   let url = appStore.invocationURL(for: activeTag, configuration: configuration) {
+                    let url = appStore.invocationURL(for: activeTag, configuration: configuration)
+                {
                     settingsInfoBlock(title: "Invocation URL", value: url.absoluteString)
                     settingsInfoBlock(
                         title: "AASA",
-                        value: "https://\(configuration.invocationHost)/.well-known/apple-app-site-association"
+                        value:
+                            "https://\(configuration.invocationHost)/.well-known/apple-app-site-association"
                     )
                 }
 
@@ -1370,7 +1894,9 @@ private struct SettingsView: View {
                     Text("真机调试要点")
                         .font(.system(size: 14, weight: .bold, design: .rounded))
                         .foregroundStyle(StudioTheme.textPrimary)
-                    Text("1. App Store Connect 中的 App Clip Experience URL 使用短地址 https://\(configuration.invocationHost)；物理 NFC 标签写入当前显示的 Invocation URL。")
+                    Text(
+                        "1. App Store Connect 中的 App Clip Experience URL 使用短地址 https://\(configuration.invocationHost)；物理 NFC 标签写入当前显示的 Invocation URL。"
+                    )
                     Text("2. 每张 NFC 标签可以各自写入不同的 /i/<tagId>，不需要在 Connect 里逐条注册。")
                     Text("3. 若设备已安装完整 App，点卡片的“打开”后 invocation 会交给完整 App 继续。")
                     Text("4. 如果你之前在 设置 > Developer > Local Experiences 注册过本地体验，测线上链路前先删除它。")
@@ -1412,7 +1938,7 @@ private struct FocusShieldSection: View {
                         Text("启用专注期屏蔽")
                             .font(.system(size: 17, weight: .bold, design: .rounded))
                             .foregroundStyle(StudioTheme.textPrimary)
-                        Text("只在 Focus Shield 打开且会话处于运行中时应用系统级屏蔽。")
+                        Text("具体屏蔽目标改在会话页维护，这里只保留总开关和授权状态。")
                             .font(.system(size: 14, weight: .medium, design: .rounded))
                             .foregroundStyle(StudioTheme.textSecondary)
                     }
@@ -1421,21 +1947,6 @@ private struct FocusShieldSection: View {
                         .labelsHidden()
                         .tint(StudioTheme.accent)
                 }
-
-                StudioActionButton(
-                    title: "选择屏蔽 App 与网站",
-                    subtitle: "打开系统选择器",
-                    tone: .secondary
-                ) {
-                    Task {
-                        _ = await focusShieldController.beginSelectionFlow()
-                    }
-                }
-
-                selectedSummaryRow
-                tokenSection("已选 App", tokens: focusShieldController.selectedApplicationTokens)
-                tokenSection("已选分类", tokens: focusShieldController.selectedCategoryTokens)
-                tokenSection("已选网站", tokens: focusShieldController.selectedWebDomainTokens)
 
                 Text(statusCopy)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
@@ -1449,15 +1960,8 @@ private struct FocusShieldSection: View {
                 }
             }
         }
-        .familyActivityPicker(
-            isPresented: $focusShieldController.isPickerPresented,
-            selection: $focusShieldController.activitySelection
-        )
         .task(id: policy.updatedAt) {
             focusShieldController.restoreSelection(from: policy)
-        }
-        .onChange(of: focusShieldController.activitySelection) { _, _ in
-            persistShieldSelection()
         }
     }
 
@@ -1472,107 +1976,16 @@ private struct FocusShieldSection: View {
         )
     }
 
-    @ViewBuilder
-    private var selectedSummaryRow: some View {
-        if policy.activitySelectionData != nil || focusShieldController.selectionSummary.isEmpty == false {
-            StudioInsetPanel {
-                Text("已选项目")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(StudioTheme.textTertiary)
-                Text(summaryText)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(StudioTheme.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        } else {
-            StudioEmptyState(
-                title: "尚未选择任何 App、分类或网站",
-                message: "启用 Focus Shield 后，先补齐真实的屏蔽目标。"
-            )
-        }
-    }
-
-    private var summaryText: String {
-        let summary = focusShieldController.selectionSummary.joined(separator: " · ")
-        return summary.isEmpty ? "已保存选择" : summary
-    }
-
     private var statusCopy: String {
         switch focusShieldController.authorizationStatus {
         case .approved:
-            "Family Controls 已授权。选择的项目会在启用 Focus Shield 且会话进行中时被真实屏蔽。"
+            "Family Controls 已授权。会话页里选择的项目会在总开关打开且会话运行时被真实屏蔽。"
         case .denied:
             "Family Controls 已被拒绝。请在系统设置中重新授权。"
         case .notDetermined:
-            "首次启用时会弹出系统授权与选择器。"
+            "首次从会话页添加屏蔽目标时会弹出系统授权与选择器。"
         @unknown default:
             "Family Controls 状态未知，请重新进入此页面确认授权。"
-        }
-    }
-
-    @ViewBuilder
-    private func tokenSection(_ title: String, tokens: [ActivityCategoryToken]) -> some View {
-        if tokens.isEmpty == false {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(StudioTheme.textPrimary)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 10) {
-                        ForEach(tokens, id: \.self) { token in
-                            StudioTokenChip {
-                                Label(token)
-                                    .labelStyle(.titleAndIcon)
-                                    .foregroundStyle(.white)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func tokenSection(_ title: String, tokens: [WebDomainToken]) -> some View {
-        if tokens.isEmpty == false {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(StudioTheme.textPrimary)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 10) {
-                        ForEach(tokens, id: \.self) { token in
-                            StudioTokenChip {
-                                Label(token)
-                                    .labelStyle(.titleAndIcon)
-                                    .foregroundStyle(.white)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func tokenSection(_ title: String, tokens: [ApplicationToken]) -> some View {
-        if tokens.isEmpty == false {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(StudioTheme.textPrimary)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 10) {
-                        ForEach(tokens, id: \.self) { token in
-                            StudioTokenChip {
-                                Label(token)
-                                    .labelStyle(.titleAndIcon)
-                                    .foregroundStyle(.white)
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -1580,29 +1993,18 @@ private struct FocusShieldSection: View {
         if isEnabled {
             let isAuthorized = await focusShieldController.requestAuthorizationIfNeeded()
             guard isAuthorized else {
-                try? appStore.updateShieldEnabled(policy: policy, enabled: false, context: modelContext)
+                try? appStore.updateShieldEnabled(
+                    policy: policy, enabled: false, context: modelContext)
                 return
             }
 
             try? appStore.updateShieldEnabled(policy: policy, enabled: true, context: modelContext)
             focusShieldController.restoreSelection(from: policy)
-            if policy.activitySelectionData == nil && focusShieldController.selectionSummary.isEmpty {
-                focusShieldController.isPickerPresented = true
-            }
             return
         }
 
         try? appStore.updateShieldEnabled(policy: policy, enabled: false, context: modelContext)
         focusShieldController.clearShield()
-    }
-
-    private func persistShieldSelection() {
-        try? appStore.updateShieldActivitySelection(
-            policy: policy,
-            encodedSelection: focusShieldController.persistableSelectionData(),
-            summary: focusShieldController.selectionSummary,
-            context: modelContext
-        )
     }
 }
 
@@ -1613,48 +2015,125 @@ private struct DecisionSheet: View {
 
     let event: ViolationEvent
     let sessions: [FocusSession]
+    let manualExitRules: [PrecedentRule]
+
+    @State private var selectedManualExitRuleID: UUID?
+    @State private var manualExitReason = ""
 
     var body: some View {
         NavigationStack {
             ZStack {
                 StudioBackground()
 
-                VStack(spacing: 22) {
-                    StudioCard(emphasis: true) {
-                        VStack(alignment: .leading, spacing: 16) {
-                            StudioSectionLabel(title: "Decision")
-                            Text(event.type.label)
-                                .font(.system(size: 30, weight: .bold, design: .rounded))
-                                .foregroundStyle(StudioTheme.textPrimary)
-                            Text(event.payload)
-                                .font(.system(size: 15, weight: .medium, design: .rounded))
-                                .foregroundStyle(StudioTheme.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text("每次违规必须二选一：断链重置，或者永久允许同类行为。")
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
-                                .foregroundStyle(StudioTheme.textTertiary)
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 22) {
+                        StudioCard(emphasis: true) {
+                            VStack(alignment: .leading, spacing: 16) {
+                                StudioSectionLabel(title: "Decision")
+                                Text(event.type.label)
+                                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                                    .foregroundStyle(StudioTheme.textPrimary)
+                                Text(event.payload)
+                                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                                    .foregroundStyle(StudioTheme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("每次违规必须二选一：断链重置，或者永久允许同类行为。")
+                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    .foregroundStyle(StudioTheme.textTertiary)
+                            }
                         }
-                    }
 
-                    StudioActionButton(
-                        title: "断链重置",
-                        subtitle: "把这次行为视为必须修正",
-                        tone: .primary
-                    ) {
-                        apply(.reset)
-                    }
+                        if event.type == .manualExit {
+                            StudioCard {
+                                VStack(alignment: .leading, spacing: 16) {
+                                    StudioSectionLabel(title: "已有永久允许行为")
 
-                    StudioActionButton(
-                        title: "永久允许该类行为",
-                        subtitle: "从此不再因此触发断链",
-                        tone: .secondary
-                    ) {
-                        apply(.allowForever)
+                                    if manualExitRules.isEmpty {
+                                        Text("还没有保存过主动退出理由。你需要为这次退出写下触发事件。")
+                                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                                            .foregroundStyle(StudioTheme.textSecondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    } else {
+                                        VStack(spacing: 10) {
+                                            ForEach(manualExitRules, id: \.id) { rule in
+                                                Button {
+                                                    selectedManualExitRuleID = rule.id
+                                                    manualExitReason = ""
+                                                } label: {
+                                                    HStack(alignment: .center, spacing: 12) {
+                                                        VStack(alignment: .leading, spacing: 4) {
+                                                            Text(rule.reasonText)
+                                                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                                                .foregroundStyle(StudioTheme.textPrimary)
+                                                            Text("永久允许 · \(rule.createdAt.formatted(date: .abbreviated, time: .omitted))")
+                                                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                                                .foregroundStyle(StudioTheme.textTertiary)
+                                                        }
+                                                        Spacer()
+                                                        if selectedManualExitRuleID == rule.id {
+                                                            Image(systemName: "checkmark.circle.fill")
+                                                                .foregroundStyle(StudioTheme.accent)
+                                                        }
+                                                    }
+                                                    .padding(14)
+                                                    .background(
+                                                        .white.opacity(selectedManualExitRuleID == rule.id ? 0.10 : 0.05),
+                                                        in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                                    )
+                                                    .overlay {
+                                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                                            .stroke(
+                                                                selectedManualExitRuleID == rule.id
+                                                                ? StudioTheme.accent.opacity(0.55)
+                                                                : .white.opacity(0.08),
+                                                                lineWidth: 1
+                                                            )
+                                                    }
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            StudioCard {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    StudioSectionLabel(title: "事件输入")
+                                    TextField("什么事件导致了这次主动退出？", text: $manualExitReason)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .studioTextEntry()
+
+                                    Text("输入新原因后会创建新的永久允许行为；如果选择了上方已有原因，则直接复用旧规则。")
+                                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                                        .foregroundStyle(StudioTheme.textTertiary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+
+                        StudioActionButton(
+                            title: "断链重置",
+                            subtitle: "把这次行为视为必须修正",
+                            tone: .primary
+                        ) {
+                            apply(.reset)
+                        }
+
+                        StudioActionButton(
+                            title: "永久允许并安全退出",
+                            subtitle: event.type == .manualExit ? "记录原因并安全结束当前会话" : "从此不再因此触发断链",
+                            tone: .secondary
+                        ) {
+                            apply(.allowForever)
+                        }
+                        .disabled(event.type == .manualExit && selectedManualExitReason.isEmpty)
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 36)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
-                .padding(.bottom, 36)
             }
             .navigationTitle("下必为例")
             .navigationBarTitleDisplayMode(.inline)
@@ -1664,10 +2143,26 @@ private struct DecisionSheet: View {
         .interactiveDismissDisabled()
     }
 
+    private var selectedManualExitReason: String {
+        let cleanedInput = manualExitReason
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { $0.isEmpty == false }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleanedInput.isEmpty == false {
+            return cleanedInput
+        }
+
+        return manualExitRules
+            .first(where: { $0.id == selectedManualExitRuleID })?
+            .reasonText ?? ""
+    }
+
     private func apply(_ decision: PrecedentDecision) {
         try? appStore.applyDecision(
             event: event,
             decision: decision,
+            reasonText: event.type == .manualExit ? selectedManualExitReason : nil,
             sessions: sessions,
             context: modelContext
         )
@@ -1716,7 +2211,7 @@ private struct SessionDraftForm: View {
                 }
 
                 if draft.shieldEnabled {
-                    Text(policy?.selectedApps.joined(separator: "、") ?? "请先在设置页配置屏蔽 App")
+                    Text(policy?.selectedApps.joined(separator: "、") ?? "请在会话页维护屏蔽目标")
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(StudioTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1771,7 +2266,9 @@ private struct SessionRow: View {
             }
         }
         .padding(16)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(
+            .white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(.white.opacity(0.08), lineWidth: 1)
@@ -1782,6 +2279,10 @@ private struct SessionRow: View {
         switch session.status {
         case .completed:
             StudioTheme.accent
+        case .awaitingNFCCompletion:
+            StudioTheme.cool
+        case .allowedExit:
+            Color(red: 0.86, green: 0.72, blue: 0.36)
         case .failed:
             Color(red: 0.93, green: 0.43, blue: 0.43)
         case .running:
@@ -1795,6 +2296,10 @@ private struct SessionRow: View {
         switch session.status {
         case .completed:
             "checkmark"
+        case .awaitingNFCCompletion:
+            "wave.3.right.circle"
+        case .allowedExit:
+            "door.left.hand.open"
         case .failed:
             "xmark"
         case .running:
@@ -1828,7 +2333,9 @@ private struct ChainNodeRow: View {
                 .foregroundStyle(StudioTheme.textTertiary)
         }
         .padding(16)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(
+            .white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(.white.opacity(0.08), lineWidth: 1)
@@ -1855,7 +2362,9 @@ private struct ChainFailureRow: View {
                 .foregroundStyle(StudioTheme.textSecondary)
         }
         .padding(16)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(
+            .white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(.white.opacity(0.08), lineWidth: 1)
@@ -1873,7 +2382,9 @@ private struct ViolationEventRow: View {
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(StudioTheme.textPrimary)
                 Spacer()
-                StudioCapsuleLabel(title: event.decisionStatus.displayLabel, tone: event.decisionStatus.capsuleTone)
+                StudioCapsuleLabel(
+                    title: event.decisionStatus.displayLabel, tone: event.decisionStatus.capsuleTone
+                )
             }
 
             Text(event.payload)
@@ -1891,9 +2402,18 @@ private struct ViolationEventRow: View {
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(StudioTheme.textTertiary)
             }
+
+            if event.decisionReasonText.isEmpty == false {
+                Text("事件输入：\(event.decisionReasonText)")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(StudioTheme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(16)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(
+            .white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(.white.opacity(0.08), lineWidth: 1)
@@ -1911,13 +2431,21 @@ private struct PrecedentRuleRow: View {
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(StudioTheme.textPrimary)
                 Spacer()
-                StudioCapsuleLabel(title: rule.createdAt.formatted(date: .abbreviated, time: .omitted))
+                StudioCapsuleLabel(
+                    title: rule.createdAt.formatted(date: .abbreviated, time: .omitted))
             }
 
             if rule.note.isEmpty == false {
                 Text(rule.note)
                     .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(StudioTheme.textSecondary)
+            }
+
+            if rule.reasonText.isEmpty == false {
+                Text("永久允许行为：\(rule.reasonText)")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(StudioTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if rule.scope.isEmpty == false {
@@ -1928,7 +2456,9 @@ private struct PrecedentRuleRow: View {
             }
         }
         .padding(16)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(
+            .white.opacity(0.05), in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(.white.opacity(0.08), lineWidth: 1)
@@ -1936,23 +2466,27 @@ private struct PrecedentRuleRow: View {
     }
 }
 
-private extension FocusSessionStatus {
-    var displayLabel: String {
+extension FocusSessionStatus {
+    fileprivate var displayLabel: String {
         switch self {
         case .ready:
             "就绪"
         case .running:
             "进行中"
+        case .awaitingNFCCompletion:
+            "待 NFC 完结"
         case .completed:
             "已完成"
+        case .allowedExit:
+            "安全退出"
         case .failed:
             "失败"
         }
     }
 }
 
-private extension ViolationDecisionStatus {
-    var displayLabel: String {
+extension ViolationDecisionStatus {
+    fileprivate var displayLabel: String {
         switch self {
         case .pending:
             "待裁决"
@@ -1963,7 +2497,7 @@ private extension ViolationDecisionStatus {
         }
     }
 
-    var capsuleTone: StudioCapsuleTone {
+    fileprivate var capsuleTone: StudioCapsuleTone {
         switch self {
         case .pending:
             .danger
@@ -1975,8 +2509,8 @@ private extension ViolationDecisionStatus {
     }
 }
 
-private extension Int {
-    var clockString: String {
+extension Int {
+    fileprivate var clockString: String {
         let hours = self / 3600
         let minutes = (self % 3600) / 60
         let seconds = self % 60
@@ -1990,14 +2524,15 @@ private extension Int {
 #Preview {
     ContentView()
         .environment(AppStore())
-        .modelContainer(for: [
-            Tag.self,
-            FocusSession.self,
-            Appointment.self,
-            ChainNode.self,
-            ViolationEvent.self,
-            PrecedentRule.self,
-            ShieldPolicy.self,
-            AppConfiguration.self
-        ], inMemory: true)
+        .modelContainer(
+            for: [
+                Tag.self,
+                FocusSession.self,
+                Appointment.self,
+                ChainNode.self,
+                ViolationEvent.self,
+                PrecedentRule.self,
+                ShieldPolicy.self,
+                AppConfiguration.self,
+            ], inMemory: true)
 }

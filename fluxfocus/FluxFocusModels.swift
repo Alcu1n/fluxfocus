@@ -1,6 +1,6 @@
 // [IN]: Foundation and SwiftData model macros / Foundation 与 SwiftData 模型宏
-// [OUT]: Persistent entities and lightweight dashboard/session value types / 持久化实体与轻量看板/会话值类型
-// [POS]: Canonical local schema for tags, sessions, violations, and configuration / 标签、会话、违规与配置的本地规范数据模式
+// [OUT]: Persistent entities plus lightweight dashboard, NFC snapshot, session, and home-chain visualization value types / 持久化实体，以及轻量看板、NFC 快照、会话与首页链条可视化值类型
+// [POS]: Canonical local schema for tags, sessions, violations, precedent reasons, configuration, and derived home-chain data / 标签、会话、违规、判例原因、配置与派生首页链条数据的本地规范数据模式
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
 
@@ -10,8 +10,19 @@ import SwiftData
 enum FocusSessionStatus: String, Codable, CaseIterable {
     case ready
     case running
+    case awaitingNFCCompletion
     case completed
+    case allowedExit
     case failed
+
+    var isActive: Bool {
+        switch self {
+        case .running, .awaitingNFCCompletion:
+            true
+        case .ready, .completed, .allowedExit, .failed:
+            false
+        }
+    }
 }
 
 enum SessionSource: String, Codable, CaseIterable {
@@ -269,6 +280,8 @@ final class ViolationEvent {
     var decisionStatusRaw: String
     var resolvedAt: Date?
     var resolvedRuleId: UUID?
+    var decisionReasonKey: String
+    var decisionReasonText: String
     var note: String
 
     init(
@@ -281,6 +294,8 @@ final class ViolationEvent {
         decisionStatus: ViolationDecisionStatus = .pending,
         resolvedAt: Date? = nil,
         resolvedRuleId: UUID? = nil,
+        decisionReasonKey: String = "",
+        decisionReasonText: String = "",
         note: String = ""
     ) {
         self.id = id
@@ -292,6 +307,8 @@ final class ViolationEvent {
         self.decisionStatusRaw = decisionStatus.rawValue
         self.resolvedAt = resolvedAt
         self.resolvedRuleId = resolvedRuleId
+        self.decisionReasonKey = decisionReasonKey
+        self.decisionReasonText = decisionReasonText
         self.note = note
     }
 
@@ -313,6 +330,8 @@ final class PrecedentRule {
     var decisionRaw: String
     var scope: String
     var createdAt: Date
+    var reasonKey: String
+    var reasonText: String
     var note: String
 
     init(
@@ -321,6 +340,8 @@ final class PrecedentRule {
         decision: PrecedentDecision,
         scope: String,
         createdAt: Date = .now,
+        reasonKey: String = "",
+        reasonText: String = "",
         note: String = ""
     ) {
         self.id = id
@@ -328,6 +349,8 @@ final class PrecedentRule {
         self.decisionRaw = decision.rawValue
         self.scope = scope
         self.createdAt = createdAt
+        self.reasonKey = reasonKey
+        self.reasonText = reasonText
         self.note = note
     }
 
@@ -393,6 +416,38 @@ struct DashboardMetrics {
     var shieldBlocks: Int
 }
 
+struct HomeChainVisualNode: Identifiable {
+    let id: UUID
+    let chainIndex: Int
+    let title: String
+    let durationSec: Int
+    let completedAt: Date
+    let proofSnippet: String
+}
+
+struct HomeChainDailyPulse: Identifiable {
+    let dayStart: Date
+    let totalFocusSeconds: Int
+    let completedCount: Int
+    let contributesToCurrentChain: Bool
+
+    var id: Date { dayStart }
+}
+
+struct HomeChainSnapshot {
+    let currentLength: Int
+    let archivedLength: Int
+    let totalCompletedSessions: Int
+    let totalFocusSeconds: Int
+    let focusSecondsToday: Int
+    let todayContributionCount: Int
+    let shieldedSessionCount: Int
+    let latestSummary: String
+    let latestCompletionAt: Date?
+    let recentNodes: [HomeChainVisualNode]
+    let dailyPulses: [HomeChainDailyPulse]
+}
+
 @Model
 final class AppConfiguration {
     @Attribute(.unique) var id: UUID
@@ -411,5 +466,111 @@ final class AppConfiguration {
         // Keep the legacy field to avoid a destructive local migration.
         self.signatureSalt = signatureSalt
         self.updatedAt = updatedAt
+    }
+}
+
+struct NFCTagSnapshot: Equatable {
+    enum SessionState: String, CaseIterable {
+        case idle
+        case run
+        case wait
+    }
+
+    static let version = "ff1"
+
+    var mainChainLength: Int
+    var appointmentChainLength: Int
+    var proofSnippet: String
+    var sessionState: SessionState
+    var unixTimestamp: Int
+    var durationMinutes: Int
+    var sessionToken: String
+
+    init(
+        mainChainLength: Int,
+        appointmentChainLength: Int,
+        proofSnippet: String,
+        sessionState: SessionState,
+        unixTimestamp: Int,
+        durationMinutes: Int,
+        sessionToken: String
+    ) {
+        self.mainChainLength = max(0, mainChainLength)
+        self.appointmentChainLength = max(0, appointmentChainLength)
+        self.proofSnippet = Self.sanitizeProofSnippet(proofSnippet)
+        self.sessionState = sessionState
+        self.unixTimestamp = max(0, unixTimestamp)
+        self.durationMinutes = max(0, durationMinutes)
+        self.sessionToken = Self.sanitizeSessionToken(sessionToken)
+    }
+
+    init?(encodedString: String) {
+        let parts = encodedString.split(separator: "|").map(String.init)
+        guard parts.first == Self.version else { return nil }
+
+        var values: [String: String] = [:]
+        for part in parts.dropFirst() {
+            let segments = part.split(separator: "=", maxSplits: 1).map(String.init)
+            guard segments.count == 2 else { continue }
+            values[segments[0]] = segments[1]
+        }
+
+        guard
+            let mainChain = Int(values["m"] ?? ""),
+            let appointmentChain = Int(values["a"] ?? ""),
+            let proofSnippet = values["p"],
+            let stateRaw = values["s"],
+            let sessionState = SessionState(rawValue: stateRaw),
+            let unixTimestamp = Int(values["t"] ?? ""),
+            let durationMinutes = Int(values["d"] ?? ""),
+            let sessionToken = values["x"]
+        else {
+            return nil
+        }
+
+        self.init(
+            mainChainLength: mainChain,
+            appointmentChainLength: appointmentChain,
+            proofSnippet: proofSnippet,
+            sessionState: sessionState,
+            unixTimestamp: unixTimestamp,
+            durationMinutes: durationMinutes,
+            sessionToken: sessionToken
+        )
+    }
+
+    var encodedString: String {
+        [
+            Self.version,
+            "m=\(mainChainLength)",
+            "a=\(appointmentChainLength)",
+            "p=\(Self.sanitizeProofSnippet(proofSnippet))",
+            "s=\(sessionState.rawValue)",
+            "t=\(unixTimestamp)",
+            "d=\(durationMinutes)",
+            "x=\(Self.sanitizeSessionToken(sessionToken))",
+        ].joined(separator: "|")
+    }
+
+    var summaryLines: [String] {
+        [
+            "Snapshot \(Self.version)",
+            "主链 \(mainChainLength) · 预约链 \(appointmentChainLength)",
+            "状态 \(sessionState.rawValue) · 时长 \(durationMinutes) 分钟",
+            "Proof \(proofSnippet)",
+            "会话 \(sessionToken)"
+        ]
+    }
+
+    private static func sanitizeProofSnippet(_ rawValue: String) -> String {
+        let filtered = rawValue.filter(\.isASCII)
+        let fallback = filtered.isEmpty ? "GENESIS" : filtered
+        return String(fallback.prefix(12))
+    }
+
+    private static func sanitizeSessionToken(_ rawValue: String) -> String {
+        let filtered = rawValue.filter(\.isASCII)
+        let fallback = filtered.isEmpty ? "none" : filtered
+        return String(fallback.prefix(8))
     }
 }
