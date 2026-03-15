@@ -268,14 +268,6 @@ struct ContentView: View {
             return
         }
 
-        try? appStore.startSession(
-            draft: quickStartDraft,
-            tag: tag,
-            sessions: sessions,
-            nodes: nodes,
-            context: modelContext,
-            source: .nfcInvocation
-        )
         selectedTab = .session
     }
 }
@@ -732,25 +724,33 @@ private struct SessionView: View {
         StudioCard {
             VStack(alignment: .leading, spacing: 22) {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let elapsed = max(0, Int(context.date.timeIntervalSince(activeSession.startAt)))
                     let remaining = max(0, activeSession.durationSec - Int(context.date.timeIntervalSince(activeSession.startAt)))
+                    let progress = activeSession.durationSec == 0 ? 0 : Double(remaining) / Double(activeSession.durationSec)
+                    let endAt = activeSession.startAt.addingTimeInterval(TimeInterval(activeSession.durationSec))
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
+                    VStack(alignment: .leading, spacing: 20) {
+                        HStack(alignment: .top) {
                             StudioCapsuleLabel(title: activeSession.source.label)
                             StudioCapsuleLabel(title: activeSession.tagName)
                             if activeSession.shieldEnabled {
                                 StudioCapsuleLabel(title: "Shield On", tone: .accent)
                             }
+                            Spacer()
+                            StudioCapsuleLabel(title: "\(elapsed / 60) / \(activeSession.durationSec / 60) min")
                         }
 
-                        Text(remaining.clockString)
-                            .font(.system(size: 52, weight: .bold, design: .rounded))
-                            .foregroundStyle(StudioTheme.textPrimary)
-                            .monospacedDigit()
+                        StudioCountdownRing(
+                            progress: progress,
+                            remainingText: remaining.clockString,
+                            detail: "开始于 \(activeSession.startAt.formatted(date: .omitted, time: .shortened)) · 预计结束 \(endAt.formatted(date: .omitted, time: .shortened))"
+                        )
 
-                        Text("开始于 \(activeSession.startAt.formatted(date: .omitted, time: .shortened))")
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundStyle(StudioTheme.textTertiary)
+                        StudioInsetPanel {
+                            sessionRuntimeLine(title: "当前目标", value: activeSession.goal)
+                            sessionRuntimeLine(title: "会话时长", value: "\(activeSession.durationSec / 60) 分钟")
+                            sessionRuntimeLine(title: "来源", value: activeSession.source.label)
+                        }
                     }
                 }
 
@@ -791,6 +791,19 @@ private struct SessionView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func sessionRuntimeLine(title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(StudioTheme.textTertiary)
+            Spacer()
+            Text(value)
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(StudioTheme.textPrimary)
+                .multilineTextAlignment(.trailing)
         }
     }
 

@@ -1,6 +1,6 @@
 // [IN]: SwiftUI and WheelPickerKit visual primitives / SwiftUI 与 WheelPickerKit 视觉原语
-// [OUT]: Shared studio theme, surfaces, buttons, chips, and text-entry styling / 共享 studio 主题、卡片、按钮、胶囊与输入样式
-// [POS]: Reusable visual language for the full-app studio experience / 完整 App studio 体验的可复用视觉语言
+// [OUT]: Shared studio theme, surfaces, buttons, chips, countdown ring, and text-entry styling / 共享 studio 主题、卡片、按钮、胶囊、倒计时圆环与输入样式
+// [POS]: Reusable visual language for the full-app studio experience and countdown system / 完整 App studio 体验与倒计时系统的可复用视觉语言
 // Protocol: When updating me, sync this header + parent folder's .folder.md
 // 协议:更新本文件时,同步更新此头注释及所属文件夹的 .folder.md
 
@@ -276,6 +276,76 @@ struct StudioMetricTile: View {
     }
 }
 
+struct StudioCountdownRing: View {
+    let progress: Double
+    let remainingText: String
+    let detail: String
+
+    @ScaledMetric private var ringSize = 246.0
+    @ScaledMetric private var ringLineWidth = 24.0
+    @ScaledMetric private var innerSpacing = 8.0
+
+    private var clampedProgress: Double {
+        min(max(progress, 0), 1)
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.08), style: StrokeStyle(lineWidth: ringLineWidth))
+
+                Circle()
+                    .trim(from: 0, to: clampedProgress)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                StudioTheme.accent,
+                                StudioTheme.cool,
+                                StudioTheme.accent.opacity(0.85)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: ringLineWidth, lineCap: .round, lineJoin: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .shadow(color: StudioTheme.accent.opacity(0.25), radius: 16, y: 6)
+                    .animation(Animation.linear(duration: 0.9), value: clampedProgress)
+
+                Circle()
+                    .fill(Color.white.opacity(0.06))
+                    .padding(ringLineWidth + 12)
+
+                VStack(spacing: innerSpacing) {
+                    Text("剩余时间")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .tracking(1.6)
+                        .foregroundStyle(StudioTheme.textTertiary)
+
+                    Text(remainingText)
+                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(StudioTheme.textPrimary)
+                        .contentTransition(.numericText())
+                }
+                .padding(.horizontal, 22)
+            }
+            .frame(width: ringSize, height: ringSize)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("会话倒计时")
+            .accessibilityValue("\(remainingText)，剩余进度 \(Int(clampedProgress * 100))%")
+
+            Text(detail)
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(StudioTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
 struct StudioEmptyState: View {
     let title: String
     let message: String
@@ -336,5 +406,17 @@ extension View {
     func studioNavigationBar() -> some View {
         toolbarBackground(.hidden, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+}
+
+#Preview("Studio Countdown Ring") {
+    ZStack {
+        StudioBackground()
+        StudioCountdownRing(
+            progress: 0.68,
+            remainingText: "16:52",
+            detail: "圆环会随着倒计时推进而缩短，中心数字负责即时读数。"
+        )
+        .padding(24)
     }
 }
